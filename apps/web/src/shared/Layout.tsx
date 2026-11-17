@@ -26,6 +26,7 @@ export function Layout() {
               Cartelera
             </NavLink>
             {user?.role === 'organizer' && <NavLink to="/organizador/eventos">Mis eventos</NavLink>}
+            {user?.role === 'customer' && <NavLink to="/mis-entradas">Mis entradas</NavLink>}
           </nav>
           <div className="site-header__session">
             {user ? (
