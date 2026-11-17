@@ -233,7 +233,7 @@ paths:
             example:
               orderId: 20000000-0000-4000-8000-000000000001
               eventId: 10000000-0000-4000-8000-000000000001
-              sectorId: 11000000-0000-4000-8000-000000000003
+              sectorId: 11000000-0000-4000-8000-000000000103
               quantity: 2
       responses:
         '201': { $ref: '#/components/responses/Reservation' }
