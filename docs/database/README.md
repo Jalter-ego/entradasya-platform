@@ -273,7 +273,7 @@ Recibe el correo validado, resumen de compra y enlace a Mis entradas; envía a M
 
 Restricción existente: `UNIQUE(order_id, ticket_number)`. La cantidad total, comprador, evento, sector y precio se leen del registro local `ticket_orders`; no se duplican en cada entrada. La transacción de emisión crea exactamente `quantity` filas y reutiliza IDs/códigos ante reintentos.
 
-El PDF se ubica en `TICKETS_STORAGE_DIR/<tickets.id>.pdf`; esta ruta se deriva, no se guarda en la tabla ni se recibe del navegador. La carpeta es persistente y externa al repositorio. Si falta el archivo, se regenera desde el snapshot sin crear una nueva entrada. La descarga pública es autenticada mediante `/api/tickets/:id/pdf` y exige que el comprador coincida con el JWT.
+El PDF se ubica en `TICKETS_STORAGE_DIR/<tickets.id>.v<PDF_LAYOUT_VERSION>.pdf` (actualmente `.v2.pdf`); esta ruta se deriva, no se guarda en la tabla ni se recibe del navegador. La carpeta es persistente y externa al repositorio. Si falta el archivo de la versión actual, se regenera desde el snapshot sin crear una nueva entrada ni cambiar su código. Esto permite aplicar un diseño nuevo también a entradas emitidas previamente, conservando los archivos anteriores. La descarga pública es autenticada mediante `/api/tickets/:id/pdf`, se llama `entrada-<tickets.id>.pdf` y exige que el comprador coincida con el JWT.
 
 No agregar `used`, `used_at` ni un estado de ingreso a tickets: checkin administra el uso. El QR contiene el código opaco, sin JWT ni URL de acceso directo al archivo.
 

@@ -8,7 +8,7 @@ Servicio independiente de emisión de entradas, PDF con QR, consulta y descarga.
 - PostgreSQL accesible y una base exclusiva de tickets, con usuario que pueda aplicar sus migraciones.
 - Clave pública RS256 de auth y acceso de escritura a la carpeta de PDF.
 
-La web de Mis entradas se implementa aparte en `apps/web`; este cambio cubre el microservicio, el contrato y sus verificaciones.
+La web de Mis entradas está en `apps/web/src/features/tickets`, ruta `/mis-entradas`. Su [README](../../apps/web/README.md#feature-tickets-p5) explica cómo probarla con el cliente de demo, incluso antes de que exista orders.
 
 ## Preparar y ejecutar
 
@@ -111,7 +111,7 @@ Contrato completo: `contracts/tickets.openapi.yaml`, en la raíz del repositorio
 }
 ```
 
-P3 obtiene `customerId` del JWT verificado y usa los datos confirmados por events/payments, nunca un precio o estado de pago que decida el navegador. El snapshot es compatible con la reserva de P2: `event`, `sector`, `reservation.quantity`, `reservation.unitPriceMinor` y `reservation.currency`. El campo opcional `event.organizerId` también se admite.
+P3 obtiene `customerId` del JWT verificado y usa los datos confirmados por events/payments, nunca un precio o estado de pago que decida el navegador. Construye el cuerpo a partir de la reserva de P2: selecciona los campos de `event` y `sector` del ejemplo, y toma `reservation.quantity`, `reservation.unitPriceMinor` y `reservation.currency`. El campo opcional `event.organizerId` también se admite; `event.city` no se envía porque el esquema actual rechaza campos adicionales. El [README de bases](../../docs/database/README.md#9-datos-que-atraviesan-el-flujo-de-compra) detalla este mapeo.
 
 Responde `{ orderId, items: [...] }`. Cada item tiene ID, número de entrada, código, evento, sector y `pdfUrl`. Esa URL requiere el JWT del comprador y pasa por Nginx; no es una URL pública al archivo.
 
@@ -203,5 +203,7 @@ Cubren: emisión por cantidad, concurrencia/idempotencia, conflicto de datos, pa
 - `ticket_orders`: una fila por orden aprobada, comprador, hash del cuerpo normalizado y copia de los datos necesarios.
 - `tickets`: una fila por entrada; código único y unicidad por `(order_id, ticket_number)`.
 - IDs y códigos se confirman en una transacción antes de generar archivos. Los PDF se escriben en un temporal y se renombran atómicamente.
+- La plantilla A5 usa la paleta del frontend: encabezado morado oscuro, acentos frambuesa, cuerpo claro y talón con QR negro sobre blanco. Ajusta la tipografía según el largo del título, lugar y sector. Usa fuentes estándar de PDF para funcionar sin descargar fuentes ni acceder a Internet al emitir.
+- Los archivos se guardan como `<ticketId>.v2.pdf`, según `PDF_LAYOUT_VERSION` en `src/tickets/pdf.ts`. Al cambiar de plantilla, incrementar esa versión: la próxima descarga genera el nuevo diseño desde el mismo snapshot, sin cambiar ID/código ni eliminar el archivo anterior. La descarga sigue llamándose `entrada-<ticketId>.pdf` y el endpoint público no cambia. No hace falta una migración de base de datos.
 - El servicio no utiliza datos de otras bases, no verifica un pago mediante HTTP y no registra check-in. Confía en la llamada autenticada de orders para la confirmación de pago.
 - Cancelaciones/devoluciones y revocación de entradas no forman parte de esta implementación. La copia del evento representa los datos de la compra; tickets no consulta cambios posteriores en events.
