@@ -3,6 +3,7 @@
 > Equipo de 6 personas · presentación local permitida
 > Fuente: EntradasYa_v1_Requerimientos.pdf, versión 1.0, y aclaraciones del equipo.
 > Estado: propuesta de trabajo. Las casillas representan tareas pendientes, no funcionalidades implementadas.
+> Referencia de datos: [README del esquema de bases de datos](database/README.md). Todos los integrantes deben basar sus migraciones y datos de integración en ese documento; distingue lo existente de lo pendiente.
 
 Los identificadores A1-F7 y V1-V12 son propios de este plan, no códigos de requisitos del PDF. Los mecanismos de recuperación ante fallos amplían el mínimo escrito; se priorizan primero el flujo completo y los errores exigidos por el docente.
 
@@ -24,6 +25,7 @@ Construiremos el sistema completo: registro, catálogo, compra, pago simulado, e
 | Web | React + Vite + TypeScript, una sola interfaz con vistas por rol. |
 | Backend | Node.js + TypeScript + Express para los siete servicios. Si alguien cambia de lenguaje, conserva el mismo contrato HTTP. |
 | Datos | Un PostgreSQL local, seis bases y seis usuarios independientes. |
+| Esquema de datos | Tablas, campos, restricciones y estados definidos en el [README de bases de datos](database/README.md); migraciones propias por servicio. |
 | Comunicación | REST por HTTP/JSON; cada petición entre servicios tiene timeout. |
 | Entrada al sistema | Nginx sirve la web y enruta las APIs públicas. |
 | Ejecución | Procesos independientes iniciados localmente mediante comandos documentados. |
@@ -71,7 +73,9 @@ entradasya/
 │   └── smoke/
 ├── tests/integration/
 ├── docs/
-│   ├── plan-implementacion.md
+│   ├── database/
+│   │   └── README.md          # Referencia de datos para P1–P6
+│   ├── Plan_de_implementacion_EntradasYa_v1.md
 │   ├── arquitectura.md
 │   ├── bitacora.md
 │   ├── demo.md
@@ -110,7 +114,7 @@ flowchart LR
 | events | 3002 | `events_db` | Eventos, sectores, precios y reservas de cupos. |
 | orders | 3003 | `orders_db` | Órdenes, detalle de compra y avance de la operación. |
 | payments | 3004 | `payments_db` | Transacción y resultado por orden. |
-| tickets | 3005 | `tickets_db` | Entradas, comprador, código y ubicación del PDF. |
+| tickets | 3005 | `tickets_db` | Entradas, comprador, código y snapshot; ubicación del PDF derivada de su ID. |
 | notifications | 3006 | Ninguna | Solo envío SMTP y logs. |
 | checkin | 3007 | `checkin_db` | Ingresos, hora, portero y ticket utilizado. |
 
@@ -124,10 +128,16 @@ Las llamadas internas siguen siendo directas: orders llama a events/payments/tic
 
 Cada base tiene un usuario diferente con permisos únicamente sobre sus propios datos. Las relaciones con otros servicios son IDs y copias de datos necesarias para la operación; no hay consultas ni claves foráneas entre bases.
 
-### Convenciones que se acuerdan antes de programar
+### Referencia de esquema para todos los integrantes
+
+El [README de bases de datos](database/README.md) define las seis bases, sus usuarios, tablas, columnas, tipos, nulabilidad, restricciones, índices y estados. También establece las referencias externas, snapshots e idempotencia del flujo de compra. Cada integrante debe consultar su sección antes de implementar o modificar migraciones; P4 prepara bases y permisos, no las tablas de todos.
+
+Las tablas existentes de events y tickets se toman como punto de partida. Los diseños de auth, orders, payments y checkin, y el snapshot inmutable de reservas, están identificados como trabajo pendiente. Documentar el modelo no ejecuta migraciones ni implica que el flujo esté integrado. Las discrepancias se resuelven actualizando esquema, migraciones y contratos en el mismo cambio, sin editar migraciones ya compartidas.
+
+### Convenciones comunes de implementación
 
 - IDs UUID; fechas ISO 8601 en UTC y presentación en hora local.
-- Importes en unidades menores enteras, por ejemplo `priceMinor=5000`, y una moneda acordada. El servidor calcula el total a partir del precio de events.
+- Importes en unidades menores enteras, por ejemplo `priceMinor=5000`, y moneda `BOB` para la demo, según el README de bases. El servidor calcula el total a partir del precio de events.
 - Estados API en inglés: eventos `draft/published/cancelled`; órdenes `pending/paid/rejected/cancelled`. La web muestra sus equivalentes en español.
 - Éxitos HTTP con JSON; errores con `{ error: { code, message }, requestId }`.
 - Errores de negocio distinguibles: `SOLD_OUT`, `PAYMENT_REJECTED`, `ALREADY_USED`, `WRONG_EVENT`, `INVALID_TICKET`.
@@ -149,6 +159,8 @@ La creación del repositorio y de la estructura de carpetas está a cargo de qui
 
 Esta preparación no incluye implementar los servicios: cada responsable inicializa su backend y su parte de la web dentro de las carpetas correspondientes. Las convenciones comunes se acuerdan entre todos.
 
+- [ ] Cada integrante revisa su sección del [esquema de bases de datos](database/README.md), sus referencias externas y los cuerpos HTTP que comparte con otros servicios antes de integrar su módulo.
+
 | Persona | Responsabilidad principal | Parte de la web | Dependencia para integrar |
 |---|---|---|---|
 | **P1** | auth + contrato de autenticación y acceso | Registro, login, sesión y navegación por rol | Ningún otro backend. |
@@ -160,21 +172,21 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P1 - Autenticación y acceso
 
-- [ ] A1. Inicializar el servicio auth dentro de la estructura existente: conexión a `auth_db`, migraciones, `.env.example` y scripts de ejecución.
+- [ ] A1. Inicializar auth: conexión a `auth_db`, tabla `users` conforme al [esquema P1](database/README.md#3-p1--auth_db), migraciones, `.env.example` y scripts de ejecución.
 - [ ] A2. Implementar configuración, `/health`, logs y manejo de errores de auth. Cada responsable prepara estos elementos en su propio servicio.
-- [ ] A3. Definir el contrato de autenticación y JWT con los servicios consumidores. Los contratos de negocio, puertos y llamadas internas se acuerdan entre todos.
+- [ ] A3. Implementar y documentar el contrato de autenticación y JWT fijado en el README de bases; verificarlo con los servicios consumidores. Los cambios de contrato se coordinan entre todos.
 - [ ] A4. Implementar registro e inicio de sesión; contraseñas con hash seguro y JWT firmado. Cada servicio valida localmente firma, expiración y claims acordados.
 - [ ] A5. Registro público solo de clientes. Crear organizador y portero mediante una semilla/script de demo, sin permitir elevar el rol desde el formulario público.
 - [ ] A6. Implementar sesión, cierre de sesión, rutas por rol y navegación base de la web. Mantener la sesión al recargar y gestionar token vencido.
 - [ ] A7. Documentar el arranque de auth y apoyar la integración del acceso con los demás servicios. Cada integrante documenta su componente y escribe su sección de la bitácora y contribuciones.
 
-**Contrato temprano:** entregar un token de ejemplo válido, claims y claves de verificación durante las primeras dos horas. Acordar `sub`, `role`, `email`, `iss`, `aud` y `exp`; el correo firmado permite a orders preparar la confirmación sin consultar auth. Propuesta: firma asimétrica, privada solo en auth y pública en los consumidores. No incluir claves reales en Git.
+**Contrato temprano:** entregar un token de ejemplo válido y claves de verificación durante las primeras dos horas. Usar los claims, roles e IDs de semilla del README de bases: `sub` UUID, `role`, `email`, `iss=entradasya-auth`, `aud=entradasya`, `iat` y `exp`, con firma `RS256`. El correo firmado permite a orders preparar la confirmación sin consultar auth. La clave privada queda solo en auth y la pública en los consumidores. No incluir claves reales en Git.
 
 **Terminado cuando:** un cliente se registra e inicia sesión, el token sirve en otro backend sin consultar auth y un cliente no puede entrar a una operación de organizador.
 
 ### P2 - Eventos y cupos
 
-- [ ] B1. Migraciones de eventos, sectores y reservas en `events_db`.
+- [ ] B1. Mantener las migraciones de `events`, `sectors` y `reservations` en `events_db` según el [esquema P2](database/README.md#4-p2--events_db); agregar con nueva migración el snapshot inmutable de la reserva y ajustar su lectura, contrato y pruebas.
 - [ ] B2. Crear, editar, publicar y cancelar eventos; guardar imagen como URL para evitar un sistema de subida de archivos en esta entrega.
 - [ ] B3. Listado público solo de publicados; listado privado de los eventos propios, incluidos borradores. El organizador solo modifica sus eventos.
 - [ ] B4. Sectores con precio y capacidad; reserva y liberación por `orderId`.
@@ -185,7 +197,7 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P3 - Órdenes y compra
 
-- [ ] C1. Migraciones de órdenes, detalle e identificadores de reintento en `orders_db`.
+- [ ] C1. Crear `orders` y `order_items` en `orders_db` según el [esquema P3](database/README.md#5-p3--orders_db): clave de idempotencia por comprador, hash, estados de avance y snapshots persistidos.
 - [ ] C2. Compra de 1 a 6 entradas de un sector de un evento; identidad y correo del cliente tomados del token validado.
 - [ ] C3. Coordinar `events -> payments -> tickets -> notifications`, guardando el avance de cada paso.
 - [ ] C4. Pago rechazado: liberar reserva y marcar rechazada. Notificación fallida: mantener compra pagada.
@@ -197,8 +209,8 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P4 - Pago, correo y soporte de datos
 
-- [ ] D1. Crear script/documentación para las seis bases y sus usuarios; cada dueño conserva sus propias migraciones y credenciales.
-- [ ] D2. payments: regla fija de demo, por ejemplo terminación `0000` rechaza y `1111` aprueba. No usar datos ni dinero reales.
+- [ ] D1. Crear script/documentación para las seis bases y sus usuarios conforme al [README de bases](database/README.md#1-bases-usuarios-y-responsabilidades); cada dueño conserva sus propias migraciones y credenciales.
+- [ ] D2. Crear la tabla `payments` según el [esquema P4](database/README.md#6-p4--payments_db-y-notifications). Regla fija de demo: terminación `0000` rechaza y `1111` aprueba; otro valor devuelve `400`. Recibir únicamente `method=demo_card` y `last4`, sin datos ni dinero reales.
 - [ ] D3. Registrar monto, fecha y resultado con unicidad por `orderId`. Repetir el pedido devuelve la misma transacción; un monto diferente para esa orden se rechaza.
 - [ ] D4. notifications: recibir destinatario y datos de confirmación, enviar enlace a las entradas por SMTP a Mailpit. No necesita base.
 - [ ] D5. Instalar/documentar Mailpit como binario y dejar accesible su interfaz de pruebas.
@@ -209,7 +221,7 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P5 - Entradas, PDF y QR
 
-- [ ] E1. Migraciones de entradas en `tickets_db`; código impredecible y único por entrada.
+- [ ] E1. Mantener `ticket_orders` y `tickets` en `tickets_db` conforme al [esquema P5](database/README.md#7-p5--tickets_db); código impredecible y único por entrada.
 - [ ] E2. Emitir una entrada por unidad comprada; unicidad por `(orderId, número de entrada)` para soportar reintentos.
 - [ ] E3. Crear PDF con evento, fecha, lugar, sector, identificador y QR; almacenar fuera del repositorio y de releases.
 - [ ] E4. Aceptar emisión solamente desde orders, con datos de una compra aprobada. Recibe la copia necesaria de los datos; no consulta las bases ni APIs de events/payments.
@@ -221,7 +233,7 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P6 - Ingreso y ejecución
 
-- [ ] F1. checkin: consultar tickets y registrar ticket, evento, fecha/hora y portero en `checkin_db`.
+- [ ] F1. Crear `checkins` en `checkin_db` conforme al [esquema P6](database/README.md#8-p6--checkin_db); consultar tickets y registrar ticket, evento, fecha/hora y portero.
 - [ ] F2. Rechazar código inválido, evento distinto y entrada utilizada; mostrar la hora del primer ingreso.
 - [ ] F3. Garantizar un único ingreso por `ticketId` con una restricción de base de datos, también ante dos escaneos concurrentes.
 - [ ] F4. Pantalla de portería con selección de evento, entrada manual/lector de código, resultado claro y conteo. Priorizar un código escrito o lector que actúe como teclado; cámara del navegador después, según tiempo y permisos.
@@ -247,12 +259,14 @@ Estas rutas son una **propuesta**, no rutas obligatorias del PDF. Confirmarlas d
 
 Las rutas concretas de editar/publicar/cancelar eventos y de reintentar órdenes se completan en los contratos de sus dueños. Nginx y el backend deben acordar si el proxy conserva `/api`; no usar reglas diferentes por accidente.
 
-### Datos que deben cerrar P2, P3, P4 y P5
+### Datos acordados que deben implementar P2, P3, P4 y P5
+
+Basarse en la [sección 9 del README de bases](database/README.md#9-datos-que-atraviesan-el-flujo-de-compra), que define el mapeo SQL/HTTP y un cuerpo de emisión compatible con tickets. P3 selecciona explícitamente los campos al transformar la reserva; `city` no se envía a tickets bajo su contrato actual. Cada dueño completa o ajusta su OpenAPI conforme a estos acuerdos.
 
 1. **Compra desde la web:** `eventId`, `sectorId`, `quantity` y datos ficticios del pago. Lleva una clave de idempotencia estable para los reintentos de esa compra. No acepta un precio decidido por el cliente.
 2. **Reserva en events:** `orderId`, `eventId`, `sectorId`, `quantity`. Devuelve reserva y copia de nombre/fecha/lugar del evento, sector, precio, moneda y organizador.
 3. **Pago:** `orderId`, importe calculado, moneda y medio ficticio. Devuelve `transactionId` y `approved/rejected`.
-4. **Emisión:** `orderId`, comprador, cantidad y copia de evento/sector. Devuelve los IDs de tickets y rutas autenticadas de descarga.
+4. **Emisión:** `orderId`, `customerId`, `paymentStatus=approved`, `quantity`, `unitPriceMinor`, `currency`, `event` y `sector`, según el ejemplo del README de bases. P3 persiste este cuerpo antes de enviarlo y lo reutiliza sin cambios. Devuelve los IDs de tickets y rutas autenticadas de descarga.
 5. **Correo:** destinatario validado, resumen y enlace público a Mis entradas; no incluir el JWT en la URL.
 6. **Ingreso:** código y evento seleccionados por el portero. tickets confirma la entrada; checkin decide y registra el uso.
 
@@ -274,11 +288,11 @@ Las operaciones se ejecutan en bases diferentes. No hay una transacción SQL que
 | Se repite emisión de tickets | Mantener los mismos registros/códigos y completar archivos faltantes. |
 | Se escanea un QR dos veces o al mismo tiempo | Un solo ingreso persistido; el segundo devuelve utilizado y hora del primero. |
 
-El avance auxiliar de orders puede guardarse como `reservationStatus`, `paymentStatus`, `ticketStatus` y `notificationStatus`, sin añadir estados de negocio distintos a los del documento. Un endpoint de reintento autenticado sobre la misma orden permite recuperar estos pasos sin introducir colas. Dos ejecuciones de la misma orden deben serializarse mediante un mecanismo persistente, no solo una bandera en memoria.
+El avance auxiliar de orders se guarda en `reservation_status`, `payment_status`, `ticket_status` y `notification_status`, con los valores definidos en el README de bases y su conversión a camelCase en HTTP, sin añadir estados de negocio distintos a los del documento. Un endpoint de reintento autenticado sobre la misma orden permite recuperar estos pasos sin introducir colas. Dos ejecuciones de la misma orden deben serializarse mediante PostgreSQL, no solo una bandera en memoria; los intentos y resultados se persisten entre pasos. Events conserva el snapshot original de la reserva y orders conserva el cuerpo original de emisión para que una edición posterior no rompa el reintento.
 
 ## 6. Orden de trabajo
 
-**Primer requisito para integrar:** contratos y JWT de P1. **Ruta crítica de compra:** events + payments -> orders -> tickets. **Ingreso:** tickets -> checkin. **Correo:** se conecta en paralelo y su caída no bloquea la compra.
+**Antes de implementar o integrar datos:** revisar el [README de bases de datos](database/README.md) y derivar las migraciones y contratos de cada módulo. **Primer requisito de acceso para integrar:** contratos y JWT de P1. **Ruta crítica de compra:** events + payments -> orders -> tickets. **Ingreso:** tickets -> checkin. **Correo:** se conecta en paralelo y su caída no bloquea la compra.
 
 P3 no espera a que terminen cuatro servicios para comenzar: usa respuestas HTTP de ejemplo, sustituidas por servicios reales antes de la demo. P6 trabaja primero en ejecución y gateway mientras P5 desarrolla la validación.
 
@@ -291,14 +305,14 @@ P3 no espera a que terminen cuatro servicios para comenzar: usa respuestas HTTP 
 - `.env.example` enumera las variables y usa valores ficticios. Archivos `.env`, claves de firma, PDF, logs y datos de PostgreSQL quedan fuera de Git.
 - Variables comunes de backends: `PORT`, conexión a su base cuando aplique, verificación JWT para APIs públicas, URLs/credenciales de los servicios que consume y timeout HTTP.
 - tickets añade `TICKETS_STORAGE_DIR`; notifications añade SMTP y `PUBLIC_WEB_URL`; auth contiene la clave privada de firma. La web solo recibe configuración pública y utiliza rutas `/api` del gateway.
-- P4 prepara un procedimiento de creación de bases; cada dueño entrega migraciones y semillas idempotentes para su servicio.
+- P4 prepara un procedimiento de creación de las bases y usuarios del README de bases; cada dueño entrega migraciones y semillas idempotentes de sus tablas conforme a ese esquema.
 
 ### Ramas y responsabilidades
 
 - Rama principal acordada al inicio (`main` o `master`), con ramas `feat/auth`, `feat/events`, etc. y PR pequeños.
 - La persona que prepara el repositorio deja la estructura raíz inicial. P1 se encarga de la navegación y el acceso compartidos; P6 de Nginx y arranque local. Los cambios posteriores en archivos comunes se coordinan entre todos para reducir conflictos.
 - Cada dueño modifica su carpeta de backend y su feature de frontend. P4 entrega su componente de pago; P3 lo integra sin reescribirlo.
-- Cambios de contrato requieren avisar al consumidor y actualizar ejemplos. No cambiar estados, nombres de campos o prefijos unilateralmente.
+- Cambios de esquema o contrato requieren actualizar el README de bases, agregar migración cuando corresponda, ajustar OpenAPI/ejemplos y avisar al consumidor. No cambiar estados, nombres de campos o prefijos unilateralmente.
 - Hacer una integración al terminar el primer día y otra al comenzar el segundo; evitar juntar seis ramas al final.
 
 ## 8. Verificación mínima de aceptación
