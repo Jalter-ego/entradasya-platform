@@ -1,0 +1,272 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - tickets (P5)
+  version: 0.1.0
+  description: |
+    Emisión idempotente por orderId, PDF con QR, consulta y descarga por comprador.
+    No consulta otros servicios ni bases. Recibe los datos de la compra desde orders.
+
+    Convenciones compatibles con la rama feat/events de P2:
+    - Nginx conserva /api. Nunca publica /internal.
+    - JWT RS256, iss=entradasya-auth, aud=entradasya, sub UUID y role=customer.
+    - X-Internal-Token, con credenciales DISTINTAS para orders y checkin.
+    - Importes en unidades menores (centavos para la moneda acordada de v1).
+    - Errores { error: { code, message }, requestId }.
+
+    Los nombres de roles/claims se coordinan con P1. Este archivo define el contrato
+    de integración propuesto para P3 y P6; no implica que ya estén conectados.
+servers:
+  - url: http://localhost:8080
+    description: APIs públicas mediante Nginx
+  - url: http://127.0.0.1:3005
+    description: Servicio directo; las llamadas internas usan esta dirección configurable
+tags:
+  - name: cliente
+  - name: orders
+  - name: checkin
+paths:
+  /health:
+    get:
+      summary: Comprueba tablas de tickets y acceso a su carpeta de PDF
+      responses:
+        '200':
+          description: Disponible
+          content:
+            application/json:
+              example: { status: ok, service: tickets }
+        '503':
+          description: Falta base, migraciones o acceso al almacenamiento
+
+  /internal/tickets/issue:
+    post:
+      tags: [orders]
+      summary: Emitir 1 a 6 entradas de una compra aprobada
+      security: [{ ordersToken: [] }]
+      description: |
+        Solo orders puede invocarlo. No pasar directamente datos enviados por el navegador.
+        Usa el snapshot de events y el resultado confirmado de payments.
+        201 crea la emisión; 200 repite exactamente la misma emisión y conserva códigos/IDs.
+        Repetir orderId con otros datos produce IDEMPOTENCY_CONFLICT.
+
+        Los registros se confirman antes de generar archivos. Un 503 PDF_UNAVAILABLE
+        puede dejar los tickets guardados: reintentar la MISMA orden y el MISMO cuerpo
+        completa los archivos sin un cobro ni una emisión nuevos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IssueInput' }
+            example:
+              orderId: 40000000-0000-4000-8000-000000000001
+              customerId: 10000000-0000-4000-8000-000000000001
+              paymentStatus: approved
+              quantity: 2
+              unitPriceMinor: 5000
+              currency: BOB
+              event:
+                id: 20000000-0000-4000-8000-000000000001
+                title: Noche de Rock
+                venue: Estadio Central
+                startsAt: '2026-12-20T23:00:00Z'
+                organizerId: 00000000-0000-4000-8000-000000000001
+              sector:
+                id: 30000000-0000-4000-8000-000000000001
+                name: Preferencia
+      responses:
+        '201': { $ref: '#/components/responses/Issued' }
+        '200': { $ref: '#/components/responses/Issued' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409':
+          description: UNPAID_ORDER o IDEMPOTENCY_CONFLICT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: PDF_UNAVAILABLE; repetir la misma emisión
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /internal/tickets/validate:
+    post:
+      tags: [checkin]
+      summary: Validar código y evento, sin registrar su uso
+      security: [{ checkinToken: [] }]
+      description: |
+        Solo checkin puede invocarlo. Un código inexistente o de otro evento devuelve
+        HTTP 200 con valid=false y reason. La autenticación o un cuerpo mal formado
+        sí usan 401/400.
+        Si valid=true, checkin debe insertar el ingreso con unicidad por ticket.id.
+        tickets no sabe si la entrada fue utilizada; una segunda validación puede
+        seguir dando valid=true. Checkin es dueño del rechazo ALREADY_USED y de su hora.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code, eventId]
+              properties:
+                code: { type: string, minLength: 1, maxLength: 128 }
+                eventId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Resultado de negocio
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [valid, ticket]
+                    properties:
+                      valid: { type: boolean, enum: [true] }
+                      ticket:
+                        type: object
+                        required: [id, orderId, customerId, eventId, paymentStatus]
+                        properties:
+                          id: { type: string, format: uuid }
+                          orderId: { type: string, format: uuid }
+                          customerId: { type: string, format: uuid }
+                          eventId: { type: string, format: uuid }
+                          paymentStatus: { type: string, enum: [approved] }
+                  - type: object
+                    required: [valid, reason]
+                    properties:
+                      valid: { type: boolean, enum: [false] }
+                      reason: { type: string, enum: [INVALID_TICKET, WRONG_EVENT] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/tickets/me:
+    get:
+      tags: [cliente]
+      summary: Entradas del cliente autenticado
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: orderId, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Lista propia; un filtro por orden ajena no devuelve entradas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, limit, offset]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Ticket' } }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/tickets/{id}/pdf:
+    get:
+      tags: [cliente]
+      summary: Descargar PDF propio; regenera el archivo si falta
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: PDF como attachment, sin caché compartida
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404':
+          description: No existe o pertenece a otro comprador
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    ordersToken: { type: apiKey, in: header, name: X-Internal-Token, description: INTERNAL_TOKEN_ORDERS }
+    checkinToken: { type: apiKey, in: header, name: X-Internal-Token, description: INTERNAL_TOKEN_CHECKIN }
+  responses:
+    Error:
+      description: Error normalizado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Issued:
+      description: Emisión completa con archivos listos
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [orderId, items]
+            properties:
+              orderId: { type: string, format: uuid }
+              items: { type: array, minItems: 1, maxItems: 6, items: { $ref: '#/components/schemas/Ticket' } }
+  schemas:
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        requestId: { type: string }
+    EventSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, title, venue, startsAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        venue: { type: string, minLength: 1, maxLength: 200 }
+        startsAt: { type: string, format: date-time }
+        organizerId: { type: string, format: uuid }
+    SectorSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 100 }
+    IssueInput:
+      type: object
+      additionalProperties: false
+      required: [orderId, customerId, paymentStatus, quantity, unitPriceMinor, currency, event, sector]
+      properties:
+        orderId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        paymentStatus:
+          type: string
+          enum: [approved, rejected, pending]
+          description: Solo approved emite; rejected/pending devuelve 409 UNPAID_ORDER
+        quantity: { type: integer, minimum: 1, maximum: 6 }
+        unitPriceMinor: { type: integer, minimum: 0, maximum: 1501199875790165 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        event: { $ref: '#/components/schemas/EventSnapshot' }
+        sector: { $ref: '#/components/schemas/SectorSnapshot' }
+    Ticket:
+      type: object
+      required: [id, orderId, customerId, ticketNumber, quantity, code, event, sector, unitPriceMinor, currency, paymentStatus, pdfUrl, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        ticketNumber: { type: integer, minimum: 1, maximum: 6 }
+        quantity: { type: integer, minimum: 1, maximum: 6 }
+        code: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        event: { $ref: '#/components/schemas/EventSnapshot' }
+        sector: { $ref: '#/components/schemas/SectorSnapshot' }
+        unitPriceMinor: { type: integer }
+        currency: { type: string }
+        paymentStatus: { type: string, enum: [approved] }
+        pdfUrl: { type: string, example: /api/tickets/50000000-0000-4000-8000-000000000001/pdf }
+        createdAt: { type: string, format: date-time }
