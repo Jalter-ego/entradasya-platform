@@ -25,7 +25,8 @@ src/
 │   └── ...
 ├── styles/global.css    # colores, tipografía y componentes base
 └── features/
-    └── events/          # P2: cartelera, detalle, organizador
+    ├── events/          # P2: cartelera, detalle, organizador
+    └── tickets/         # P5: Mis entradas y descarga autenticada
 ```
 
 Cada integrante trabaja en `src/features/<su-feature>/` y agrega sus rutas en `App.tsx`.
@@ -58,3 +59,70 @@ Contraseña de todas: `demo1234`. La pantalla `/login` las muestra con un botón
 - **P3 (orders):**
   - La ruta `/checkout`, que hoy es un marcador.
   - El reporte `GET /api/orders/reports/events/:eventId` con la forma de `SalesReport` en `features/events/api.ts`: `{ eventId, currency, paidOrders, ticketsSold, revenueMinor, bySector? }`. Si cambia, se ajusta ahí. Hasta que exista, el panel muestra los lugares reservados.
+
+## Feature tickets (P5)
+
+| Ruta | Pantalla |
+|---|---|
+| `/mis-entradas` | Entradas del cliente autenticado; evento, fecha, lugar, sector, precio unitario, código y descarga individual de PDF. |
+| `/mis-entradas?orderId=<UUID>` | La misma lista filtrada por una compra propia; enlace para volver a todas las entradas. |
+
+El enlace aparece en el encabezado para `role=customer`. La página usa `GET /api/tickets/me` y descarga con `GET /api/tickets/:id/pdf`, enviando Bearer en ambos casos. El token no se incluye en URLs ni se usa la API interna desde el navegador. Hay paginación de 12 entradas, actualización manual y estados de carga, vacío y error. Cambiar de sesión cancela las peticiones y desmonta las entradas anteriores.
+
+La etiqueta «Emitida» confirma la emisión; no indica si la entrada ya se utilizó. Ese dato lo administra checkin. El QR se muestra en el PDF emitido por tickets.
+
+### Probar antes de que exista orders
+
+Se puede desarrollar/probar esta pantalla sin P1 ni P3: el login provisional permite entrar como cliente y tickets puede emitir entradas de demo por su API interna. Sin entradas emitidas se muestra una lista vacía; events no es necesario para consultar o descargar entradas ya emitidas.
+
+1. Configurar/migrar y levantar `services/tickets` siguiendo su README.
+2. Verificar que su clave pública corresponda a la clave de desarrollo usada por el login web (`services/events/keys/dev-private.pem`), con el mismo issuer/audience. No generar un par diferente para cada servicio.
+3. Para crear dos entradas de demo **en el servicio local**, ejecutar desde `services/tickets`, en otra terminal con Node 22.11 o superior:
+
+```bash
+node --env-file=.env --input-type=module <<'NODE'
+const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3005}/internal/tickets/issue`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Internal-Token': process.env.INTERNAL_TOKEN_ORDERS,
+  },
+  body: JSON.stringify({
+    orderId: '40000000-0000-4000-8000-000000000005',
+    customerId: '00000000-0000-4000-8000-000000000002',
+    paymentStatus: 'approved',
+    quantity: 2,
+    unitPriceMinor: 5000,
+    currency: 'BOB',
+    event: {
+      id: '20000000-0000-4000-8000-000000000001',
+      title: 'Noche de Rock — demo de entradas',
+      venue: 'Estadio Central',
+      startsAt: '2026-12-20T23:00:00.000Z',
+      organizerId: '00000000-0000-4000-8000-000000000001',
+    },
+    sector: { id: '30000000-0000-4000-8000-000000000001', name: 'General' },
+  }),
+});
+const result = await response.json();
+if (!response.ok) throw new Error(`${response.status}: ${result.error?.message ?? 'No se pudo emitir'}`);
+console.log(`HTTP ${response.status}: ${result.items.length} entradas listas para el cliente de demo.`);
+NODE
+```
+
+Este comando crea registros/PDF de prueba y simula la llamada de orders; no procesa una compra ni reserva cupos. Usa UUID y fecha fijos para que repetirlo conserve las mismas dos entradas. No cambiar el cuerpo con ese mismo `orderId`; para otro caso de prueba, usar un UUID de orden nuevo. La credencial interna se lee del `.env` del backend y nunca se publica en la configuración del frontend.
+
+4. Levantar la web e iniciar sesión como `cliente@demo.bo` / `demo1234`.
+5. Abrir `/mis-entradas`, descargar ambos PDF y comprobar el QR. También puede usarse `/mis-entradas?orderId=40000000-0000-4000-8000-000000000005`.
+
+Para P1: conservar `useSession()` o actualizar sus consumidores al reemplazar el acceso. Para P3: emitir usando el contrato de tickets y enlazar `/mis-entradas?orderId=<UUID>` desde el resultado de compra. P4 puede usar `/mis-entradas` como enlace en el correo; el usuario inicia sesión, sin JWT en la URL. P6 debe conservar `/api/tickets` al configurar Nginx y servir la SPA también en `/mis-entradas`.
+
+### Verificación local del frontend
+
+```bash
+npm run typecheck
+npm run build
+npm test
+```
+
+Las pruebas de tickets usan el ejecutor de Node y el compilador TypeScript ya instalado, sin nuevas dependencias. Simulan `fetch` y verifican Bearer, filtro/paginación, respuesta binaria, errores 401/403/404/503, errores del proxy, archivo vacío, HTML inesperado, caída de red y cancelación. No reemplazan la comprobación manual con el backend y PostgreSQL.
