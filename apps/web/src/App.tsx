@@ -4,6 +4,7 @@ import { CatalogPage } from './features/events/pages/CatalogPage';
 import { EventDetailPage } from './features/events/pages/EventDetailPage';
 import { EventFormPage } from './features/events/pages/EventFormPage';
 import { OrganizerEventsPage } from './features/events/pages/OrganizerEventsPage';
+import { MyTicketsPage } from './features/tickets/pages/MyTicketsPage';
 import { Layout } from './shared/Layout';
 import { LoginPage } from './shared/LoginPage';
 import { RequireRole } from './shared/RequireRole';
@@ -51,6 +52,7 @@ export function App() {
             <Route index element={<CatalogPage />} />
             <Route path="eventos/:id" element={<EventDetailPage />} />
             <Route path="checkout" element={<CheckoutPlaceholder />} />
+            <Route path="mis-entradas" element={<RequireRole role="customer"><MyTicketsPage /></RequireRole>} />
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Panel del organizador (P2): marco propio con barra lateral. */}
