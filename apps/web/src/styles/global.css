@@ -613,10 +613,10 @@ textarea.input {
   }
 }
 
-/* Encabezado en una sola línea en pantallas chicas. */
+/* Sesión en la primera fila y navegación debajo en pantallas chicas. */
 @media (max-width: 560px) {
   .site-header__inner {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 10px;
   }
   .brand {
@@ -629,6 +629,9 @@ textarea.input {
   }
   .site-nav {
     min-width: 0;
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
   }
   .site-nav a {
     padding: 6px 8px;
