@@ -147,7 +147,11 @@ await withTransaction(db, async (tx) => {
        ON CONFLICT (id) DO UPDATE SET
          title = EXCLUDED.title, description = EXCLUDED.description, venue = EXCLUDED.venue,
          city = EXCLUDED.city, category = EXCLUDED.category, starts_at = EXCLUDED.starts_at,
-         image_url = EXCLUDED.image_url, currency = EXCLUDED.currency, updated_at = now()`,
+         image_url = EXCLUDED.image_url,
+         -- Con reservas, la moneda queda fija para no mezclarla con la de las reservas.
+         currency = CASE WHEN EXISTS (SELECT 1 FROM reservations r WHERE r.event_id = events.id)
+                         THEN events.currency ELSE EXCLUDED.currency END,
+         updated_at = now()`,
       [e.id, organizerId, e.title, e.description, e.venue, e.city, e.category, e.startsAt, e.imageUrl, currency, e.status],
     );
     // Quita sectores de demo que ya no están en la lista (solo si nunca tuvieron reservas).
@@ -158,12 +162,24 @@ await withTransaction(db, async (tx) => {
       [e.id, e.sectors.map((sec) => sec.id)],
     );
     for (const sec of e.sectors) {
-      // La capacidad nunca baja de lo ya reservado.
+      // Un sector viejo con reservas no se borra: si ocupa el mismo nombre, se conserva
+      // y se omite el nuevo (si no, UNIQUE(event_id, name) abortaría toda la semilla).
+      const clash = await tx.query(
+        `SELECT 1 FROM sectors WHERE event_id = $1 AND name = $2 AND id <> $3`,
+        [e.id, sec.name, sec.id],
+      );
+      if (clash.rowCount) {
+        console.warn(`Se omite el sector "${sec.name}" de "${e.title}": ya existe otro con reservas.`);
+        continue;
+      }
+      // La capacidad nunca baja de lo ya reservado. Con reservas, el precio queda fijo.
       await tx.query(
         `INSERT INTO sectors (id, event_id, name, price_minor, capacity)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (id) DO UPDATE SET
-           name = EXCLUDED.name, price_minor = EXCLUDED.price_minor,
+           name = EXCLUDED.name,
+           price_minor = CASE WHEN sectors.reserved > 0 OR EXISTS (SELECT 1 FROM reservations r WHERE r.sector_id = sectors.id)
+                              THEN sectors.price_minor ELSE EXCLUDED.price_minor END,
            capacity = GREATEST(EXCLUDED.capacity, sectors.reserved), updated_at = now()`,
         [sec.id, e.id, sec.name, sec.priceMinor, sec.capacity],
       );

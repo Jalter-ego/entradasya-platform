@@ -37,14 +37,17 @@ export function toEventInput(v: EventFieldValues): EventInput {
 }
 
 /** Devuelve el mensaje de error de cada campo, o un objeto vacío si todo está bien. */
-export function validateFields(v: EventFieldValues): Partial<Record<keyof EventFieldValues, string>> {
+export function validateFields(
+  v: EventFieldValues,
+  { requireFutureDate = true }: { requireFutureDate?: boolean } = {},
+): Partial<Record<keyof EventFieldValues, string>> {
   const errors: Partial<Record<keyof EventFieldValues, string>> = {};
   if (!v.title.trim()) errors.title = 'Escribe el nombre del evento.';
   if (!v.venue.trim()) errors.venue = 'Indica dónde se realiza.';
   if (!v.city) errors.city = 'Elige la ciudad.';
   if (!v.category) errors.category = 'Elige una categoría.';
   if (!v.startsAt) errors.startsAt = 'Elige la fecha y la hora.';
-  else if (new Date(v.startsAt).getTime() <= Date.now()) errors.startsAt = 'La fecha debe ser futura.';
+  else if (requireFutureDate && new Date(v.startsAt).getTime() <= Date.now()) errors.startsAt = 'La fecha debe ser futura.';
   if (v.imageUrl.trim() && !/^https?:\/\/\S+$/i.test(v.imageUrl.trim())) {
     errors.imageUrl = 'Usa un enlace que empiece con http:// o https://';
   }

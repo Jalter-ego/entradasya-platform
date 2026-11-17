@@ -166,13 +166,17 @@ function EditEventForm({ initial, token }: { initial: EventItem; token: string |
 
   async function saveDetails(e: FormEvent) {
     e.preventDefault();
-    const fieldErrors = validateFields(values);
+    // La fecha solo se valida (y se envía) si el organizador la cambió: así se puede
+    // corregir el título de un evento cuya fecha ya pasó.
+    const dateChanged = values.startsAt !== toFieldValues(event).startsAt;
+    const fieldErrors = validateFields(values, { requireFutureDate: dateChanged });
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length) return;
 
     const next = toEventInput(values);
     const patch: Partial<EventInput> = {};
     (Object.keys(next) as (keyof EventInput)[]).forEach((k) => {
+      if (k === 'startsAt' && !dateChanged) return;
       if (next[k] !== event[k]) (patch as Record<string, unknown>)[k] = next[k];
     });
     if (Object.keys(patch).length === 0) {

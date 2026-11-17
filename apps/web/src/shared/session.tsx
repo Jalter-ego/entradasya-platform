@@ -5,7 +5,7 @@
  *
  * Mientras tanto, /login usa el auth de prueba de Vite (apps/web/dev-auth.ts).
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Role = 'customer' | 'organizer' | 'doorman' | string;
 
@@ -70,6 +70,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       /* nada que limpiar */
     }
   }, []);
+
+  // Cierra la sesión en cuanto vence el token, aunque la pestaña siga abierta.
+  useEffect(() => {
+    const user = token ? decode(token) : null;
+    if (!token) return;
+    if (!user) {
+      signOut();
+      return;
+    }
+    // setTimeout acepta como máximo ~24,8 días; si falta más, se revisa al recargar.
+    const ms = Math.min(user.expiresAt - Date.now(), 2 ** 31 - 1);
+    const timer = setTimeout(signOut, ms);
+    return () => clearTimeout(timer);
+  }, [token, signOut]);
 
   const value = useMemo<SessionValue>(() => {
     const user = token ? decode(token) : null;

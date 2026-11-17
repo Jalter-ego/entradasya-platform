@@ -60,8 +60,21 @@ const base = '/api/events';
 type Token = string | null;
 
 export const eventsApi = {
-  listPublished: (signal?: AbortSignal) =>
-    api<{ items: EventItem[] }>(`${base}?limit=100`, { signal }).then((r) => r.items),
+  /**
+   * Toda la cartelera, página por página (el backend entrega hasta 100 por pedido).
+   * La búsqueda por texto y los filtros se hacen en la web sobre la lista completa.
+   */
+  listPublished: async (signal?: AbortSignal) => {
+    const PAGE = 100;
+    const MAX_PAGES = 50;
+    const all: EventItem[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { items } = await api<{ items: EventItem[] }>(`${base}?limit=${PAGE}&offset=${page * PAGE}`, { signal });
+      all.push(...items);
+      if (items.length < PAGE) break;
+    }
+    return all;
+  },
   get: (id: string, token: Token, signal?: AbortSignal) =>
     api<EventItem>(`${base}/${encodeURIComponent(id)}`, { token, signal }),
   listMine: (token: Token, signal?: AbortSignal) =>
