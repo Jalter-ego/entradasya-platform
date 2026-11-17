@@ -1,4 +1,5 @@
-import { BrowserRouter, Link, Route, Routes, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
+import { OrganizerLayout } from './features/events/components/OrganizerLayout';
 import { CatalogPage } from './features/events/pages/CatalogPage';
 import { EventDetailPage } from './features/events/pages/EventDetailPage';
 import { EventFormPage } from './features/events/pages/EventFormPage';
@@ -49,32 +50,22 @@ export function App() {
           <Route element={<Layout />}>
             <Route index element={<CatalogPage />} />
             <Route path="eventos/:id" element={<EventDetailPage />} />
-            <Route
-              path="organizador/eventos"
-              element={
-                <RequireRole role="organizer">
-                  <OrganizerEventsPage />
-                </RequireRole>
-              }
-            />
-            <Route
-              path="organizador/eventos/nuevo"
-              element={
-                <RequireRole role="organizer">
-                  <EventFormPage />
-                </RequireRole>
-              }
-            />
-            <Route
-              path="organizador/eventos/:id"
-              element={
-                <RequireRole role="organizer">
-                  <EventFormPage />
-                </RequireRole>
-              }
-            />
             <Route path="checkout" element={<CheckoutPlaceholder />} />
             <Route path="*" element={<NotFound />} />
+          </Route>
+          {/* Panel del organizador (P2): marco propio con barra lateral. */}
+          <Route
+            path="organizador"
+            element={
+              <RequireRole role="organizer">
+                <OrganizerLayout />
+              </RequireRole>
+            }
+          >
+            <Route index element={<Navigate to="eventos" replace />} />
+            <Route path="eventos" element={<OrganizerEventsPage />} />
+            <Route path="eventos/nuevo" element={<EventFormPage />} />
+            <Route path="eventos/:id" element={<EventFormPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
