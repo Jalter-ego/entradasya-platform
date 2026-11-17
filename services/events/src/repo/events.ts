@@ -97,9 +97,9 @@ export interface PublicFilters {
   offset: number;
   category?: string;
   city?: string;
-  /** Por defecto solo eventos que todavía no comenzaron. */
-  includePast?: boolean;
 }
+
+/** Cartelera pública: solo eventos publicados que todavía no comenzaron. */
 
 export async function listPublished(db: Db, f: PublicFilters) {
   const { rows } = await db.query<EventRow>(
@@ -107,9 +107,9 @@ export async function listPublished(db: Db, f: PublicFilters) {
      WHERE status = 'published'
        AND ($3::text IS NULL OR category = $3)
        AND ($4::text IS NULL OR city = $4)
-       AND ($5::boolean OR starts_at > now())
+       AND starts_at > now()
      ORDER BY starts_at, id LIMIT $1 OFFSET $2`,
-    [f.limit, f.offset, f.category ?? null, f.city ?? null, f.includePast ?? false],
+    [f.limit, f.offset, f.category ?? null, f.city ?? null],
   );
   return withSectors(db, rows);
 }
