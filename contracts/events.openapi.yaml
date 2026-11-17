@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - events
+  version: 0.1.0
+  description: |
+    Eventos, sectores y cupos. Dueño: P2.
+
+    - Rutas públicas bajo `/api/events` (Nginx conserva el prefijo `/api`).
+    - Rutas internas bajo `/internal` solo para orders, con `X-Internal-Token`. Nginx no las publica.
+    - Importes en unidades menores enteras (`priceMinor: 5000` = 50,00). Fechas ISO 8601 en UTC.
+    - Errores: `{ "error": { "code", "message" }, "requestId" }`.
+
+    Pendiente de confirmar con P1: nombres de roles (`customer`, `organizer`, `doorman`) y claims del JWT (`sub`, `role`, `email`, `iss`, `aud`, `exp`).
+servers:
+  - url: http://localhost:8080
+    description: A través de Nginx
+  - url: http://127.0.0.1:3002
+    description: Directo al servicio (desarrollo)
+
+tags:
+  - name: público
+  - name: organizador
+  - name: interno
+
+paths:
+  /health:
+    get:
+      summary: Salud del servicio (incluye la base)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example: { status: ok, service: events }
+        '503':
+          description: La base no responde
+
+  /api/events:
+    get:
+      tags: [público]
+      summary: Cartelera (solo eventos publicados)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Lista ordenada por fecha
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Event' } }
+                  limit: { type: integer }
+                  offset: { type: integer }
+    post:
+      tags: [organizador]
+      summary: Crear evento (queda en borrador)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventCreate' }
+            example:
+              title: Noche de Rock Nacional
+              description: Las mejores bandas locales
+              venue: Estadio Central
+              startsAt: '2026-12-20T23:00:00Z'
+              imageUrl: https://example.com/poster.jpg
+              sectors:
+                - { name: Campo, priceMinor: 5000, capacity: 200 }
+                - { name: VIP, priceMinor: 20000, capacity: 20 }
+      responses:
+        '201': { $ref: '#/components/responses/Event' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/events/mine:
+    get:
+      tags: [organizador]
+      summary: Eventos del organizador autenticado (incluye borradores y cancelados)
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Event' } }
+
+  /api/events/{id}:
+    parameters: [{ $ref: '#/components/parameters/EventId' }]
+    get:
+      tags: [público]
+      summary: Detalle. Publicados y cancelados son públicos; un borrador solo lo ve su organizador.
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [organizador]
+      summary: Editar datos del evento (no el estado ni los sectores)
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventPatch' }
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409':
+          description: EVENT_CANCELLED
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /api/events/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/EventId' }]
+    post:
+      tags: [organizador]
+      summary: Publicar (idempotente). Requiere al menos un sector y fecha futura.
+      security: [{ bearer: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+        '409':
+          description: NO_SECTORS, EVENT_IN_PAST, EVENT_CANCELLED
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /api/events/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/EventId' }]
+    post:
+      tags: [organizador]
+      summary: Cancelar (idempotente). Las reservas nuevas se rechazan con EVENT_NOT_AVAILABLE.
+      security: [{ bearer: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+
+  /api/events/{id}/sectors:
+    parameters: [{ $ref: '#/components/parameters/EventId' }]
+    post:
+      tags: [organizador]
+      summary: Agregar sector
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SectorInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Event' }
+        '409':
+          description: SECTOR_NAME_TAKEN, EVENT_CANCELLED
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /api/events/{id}/sectors/{sectorId}:
+    parameters:
+      - { $ref: '#/components/parameters/EventId' }
+      - { name: sectorId, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [organizador]
+      summary: Editar sector. La capacidad no puede bajar del cupo comprometido.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 100 }
+                priceMinor: { type: integer, minimum: 0 }
+                capacity: { type: integer, minimum: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+        '409':
+          description: CAPACITY_BELOW_COMMITTED, SECTOR_NAME_TAKEN
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    delete:
+      tags: [organizador]
+      summary: Borrar sector (solo si nunca tuvo reservas)
+      security: [{ bearer: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Event' }
+        '409':
+          description: SECTOR_HAS_RESERVATIONS, LAST_SECTOR
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /internal/reservations:
+    post:
+      tags: [interno]
+      summary: Reservar cupos (atómico e idempotente por orderId)
+      description: |
+        - 201: reserva creada. 200: misma petición repetida, devuelve la misma reserva sin descontar otra vez.
+        - El precio lo decide events y queda fijado en la reserva (`unitPriceMinor`, `totalMinor`).
+        - Si hay un timeout, orders puede repetir la petición o consultar `GET /internal/reservations/{orderId}`.
+      security: [{ internal: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, eventId, sectorId, quantity]
+              properties:
+                orderId: { type: string, format: uuid }
+                eventId: { type: string, format: uuid }
+                sectorId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1, maximum: 6 }
+            example:
+              orderId: 20000000-0000-4000-8000-000000000001
+              eventId: 10000000-0000-4000-8000-000000000001
+              sectorId: 11000000-0000-4000-8000-000000000003
+              quantity: 2
+      responses:
+        '201': { $ref: '#/components/responses/Reservation' }
+        '200': { $ref: '#/components/responses/Reservation' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404':
+          description: Evento o sector no encontrado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409':
+          description: |
+            SOLD_OUT (no alcanza el cupo), EVENT_NOT_AVAILABLE (no publicado, cancelado o ya comenzó),
+            IDEMPOTENCY_CONFLICT (ese orderId ya reservó con otros datos), RESERVATION_RELEASED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: SOLD_OUT, message: No quedan cupos suficientes en el sector }
+                requestId: ace31e51-3454-4240-a50d-8daef9edaf91
+
+  /internal/reservations/{orderId}:
+    parameters: [{ $ref: '#/components/parameters/OrderId' }]
+    get:
+      tags: [interno]
+      summary: Consultar la reserva de una orden
+      security: [{ internal: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Reservation' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /internal/reservations/{orderId}/release:
+    parameters: [{ $ref: '#/components/parameters/OrderId' }]
+    post:
+      tags: [interno]
+      summary: Liberar la reserva (idempotente; repetirla no suma cupos otra vez)
+      security: [{ internal: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Reservation' }
+        '404': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    internal: { type: apiKey, in: header, name: X-Internal-Token }
+
+  parameters:
+    EventId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderId: { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+
+  responses:
+    Event:
+      description: Evento
+      content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } }
+    Reservation:
+      description: Reserva con copia de datos de evento y sector
+      content: { application/json: { schema: { $ref: '#/components/schemas/Reservation' } } }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+        requestId: { type: string }
+
+    Sector:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: Campo }
+        priceMinor: { type: integer, example: 5000 }
+        capacity: { type: integer, example: 200 }
+        available: { type: integer, example: 187 }
+
+    SectorInput:
+      type: object
+      required: [name, priceMinor, capacity]
+      properties:
+        name: { type: string, maxLength: 100 }
+        priceMinor: { type: integer, minimum: 0 }
+        capacity: { type: integer, minimum: 1 }
+
+    Event:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizerId: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        venue: { type: string }
+        startsAt: { type: string, format: date-time }
+        imageUrl: { type: string, nullable: true }
+        currency: { type: string, example: USD }
+        status: { type: string, enum: [draft, published, cancelled] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        sectors: { type: array, items: { $ref: '#/components/schemas/Sector' } }
+
+    EventCreate:
+      type: object
+      required: [title, venue, startsAt]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        venue: { type: string, maxLength: 200 }
+        startsAt: { type: string, format: date-time, description: Debe ser futura }
+        imageUrl: { type: string, nullable: true, description: URL http(s) }
+        sectors: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/SectorInput' } }
+
+    EventPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        description: { type: string }
+        venue: { type: string }
+        startsAt: { type: string, format: date-time }
+        imageUrl: { type: string, nullable: true }
+
+    Reservation:
+      type: object
+      properties:
+        reservation:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            orderId: { type: string, format: uuid }
+            eventId: { type: string, format: uuid }
+            sectorId: { type: string, format: uuid }
+            quantity: { type: integer }
+            unitPriceMinor: { type: integer }
+            totalMinor: { type: integer }
+            currency: { type: string }
+            status: { type: string, enum: [active, released] }
+            createdAt: { type: string, format: date-time }
+            releasedAt: { type: string, format: date-time, nullable: true }
+        event:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            title: { type: string }
+            venue: { type: string }
+            startsAt: { type: string, format: date-time }
+            organizerId: { type: string, format: uuid }
+        sector:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
