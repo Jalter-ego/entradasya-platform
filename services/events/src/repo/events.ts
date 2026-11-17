@@ -12,6 +12,8 @@ interface EventRow {
   title: string;
   description: string;
   venue: string;
+  city: string;
+  category: string;
   starts_at: Date;
   image_url: string | null;
   currency: string;
@@ -39,6 +41,8 @@ export interface EventInput {
   title: string;
   description: string;
   venue: string;
+  city: string;
+  category: string;
   startsAt: Date;
   imageUrl: string | null;
 }
@@ -60,6 +64,8 @@ function toEventDto(e: EventRow, sectors: SectorRow[]) {
     title: e.title,
     description: e.description,
     venue: e.venue,
+    city: e.city,
+    category: e.category,
     startsAt: e.starts_at.toISOString(),
     imageUrl: e.image_url,
     currency: e.currency,
@@ -86,11 +92,24 @@ export const isUuid = (v: string) => UUID_RE.test(v);
 
 // ---------------------------------------------------------------- lecturas
 
-export async function listPublished(db: Db, limit: number, offset: number) {
+export interface PublicFilters {
+  limit: number;
+  offset: number;
+  category?: string;
+  city?: string;
+  /** Por defecto solo eventos que todavía no comenzaron. */
+  includePast?: boolean;
+}
+
+export async function listPublished(db: Db, f: PublicFilters) {
   const { rows } = await db.query<EventRow>(
-    `SELECT * FROM events WHERE status = 'published'
+    `SELECT * FROM events
+     WHERE status = 'published'
+       AND ($3::text IS NULL OR category = $3)
+       AND ($4::text IS NULL OR city = $4)
+       AND ($5::boolean OR starts_at > now())
      ORDER BY starts_at, id LIMIT $1 OFFSET $2`,
-    [limit, offset],
+    [f.limit, f.offset, f.category ?? null, f.city ?? null, f.includePast ?? false],
   );
   return withSectors(db, rows);
 }
@@ -162,9 +181,19 @@ export async function createEvent(
 ) {
   return withTransaction(db, async (tx) => {
     const { rows } = await tx.query<{ id: string }>(
-      `INSERT INTO events (organizer_id, title, description, venue, starts_at, image_url, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [user.id, input.title, input.description, input.venue, input.startsAt, input.imageUrl, currency],
+      `INSERT INTO events (organizer_id, title, description, venue, city, category, starts_at, image_url, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [
+        user.id,
+        input.title,
+        input.description,
+        input.venue,
+        input.city,
+        input.category,
+        input.startsAt,
+        input.imageUrl,
+        currency,
+      ],
     );
     const eventId = rows[0].id;
     for (const s of input.sectors) {
@@ -183,6 +212,8 @@ const EVENT_COLUMNS: Record<keyof EventInput, string> = {
   title: 'title',
   description: 'description',
   venue: 'venue',
+  city: 'city',
+  category: 'category',
   startsAt: 'starts_at',
   imageUrl: 'image_url',
 };

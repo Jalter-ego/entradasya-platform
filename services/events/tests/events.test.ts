@@ -221,6 +221,44 @@ describe('ciclo de vida del evento', () => {
     expect(reserve.body.error.code).toBe('EVENT_NOT_AVAILABLE');
   });
 
+  it('filtra la cartelera por categoría y ciudad', async () => {
+    const owner = await svc.newUser();
+    const combos = [
+      { title: 'Rock en La Paz', category: 'concierto', city: 'La Paz' },
+      { title: 'Rock en Cochabamba', category: 'concierto', city: 'Cochabamba' },
+      { title: 'Obra en La Paz', category: 'teatro', city: 'La Paz' },
+    ];
+    for (const c of combos) {
+      const event = await createEvent(owner.token, eventBody(c));
+      await publish(owner.token, event.id);
+    }
+    const titles = async (qs: string) =>
+      (await api().get(`/api/events${qs}`)).body.items.map((e: { title: string }) => e.title).sort();
+
+    expect(await titles('')).toHaveLength(3);
+    expect(await titles('?category=concierto')).toEqual(['Rock en Cochabamba', 'Rock en La Paz']);
+    expect(await titles('?city=La%20Paz')).toEqual(['Obra en La Paz', 'Rock en La Paz']);
+    expect(await titles('?category=teatro&city=Cochabamba')).toEqual([]);
+    expect((await api().get('/api/events?city=Narnia')).status).toBe(400);
+
+    const catalog = await api().get('/api/events/catalog');
+    expect(catalog.body.categories).toContain('concierto');
+    expect(catalog.body.cities).toContain('Santa Cruz de la Sierra');
+  });
+
+  it('exige categoría y ciudad válidas', async () => {
+    const owner = await svc.newUser();
+    const auth = { Authorization: `Bearer ${owner.token}` };
+    for (const body of [eventBody({ category: 'magia' }), eventBody({ city: 'Lima' }), eventBody({ city: undefined })]) {
+      const res = await api().post('/api/events').set(auth).send(body);
+      expect(res.status).toBe(400);
+    }
+    const event = await createEvent(owner.token);
+    const res = await api().patch(`/api/events/${event.id}`).set(auth).send({ city: 'Sucre', category: 'teatro' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ city: 'Sucre', category: 'teatro' });
+  });
+
   it('ids inválidos o inexistentes devuelven 404', async () => {
     expect((await api().get('/api/events/no-es-uuid')).status).toBe(404);
     expect((await api().get(`/api/events/${crypto.randomUUID()}`)).status).toBe(404);

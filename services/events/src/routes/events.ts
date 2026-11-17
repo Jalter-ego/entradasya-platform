@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { CATEGORIES, CITIES } from '../catalog.js';
 import type { Db } from '../db.js';
 import { ROLES, optionalAuth, requireRole, type VerifyToken } from '../http/auth.js';
 import { AppError } from '../http/errors.js';
@@ -29,6 +30,8 @@ const eventFields = {
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(5000),
   venue: z.string().trim().min(1).max(200),
+  city: z.enum(CITIES),
+  category: z.enum(CATEGORIES),
   startsAt: futureDate,
   imageUrl: imageUrl.nullable(),
 };
@@ -54,16 +57,23 @@ const patchSectorSchema = sectorSchema
 const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  category: z.enum(CATEGORIES).optional(),
+  city: z.enum(CITIES).optional(),
 });
 
 export function eventsRouter(db: Db, verify: VerifyToken, currency: string): Router {
   const router = Router();
   const organizer = requireRole(verify, ROLES.ORGANIZER);
 
-  // Cartelera pública: solo eventos publicados.
+  // Cartelera pública: eventos publicados que todavía no comenzaron.
   router.get('/', async (req, res) => {
-    const { limit, offset } = listQuery.parse(req.query);
-    res.json({ items: await repo.listPublished(db, limit, offset), limit, offset });
+    const filters = listQuery.parse(req.query);
+    res.json({ items: await repo.listPublished(db, filters), limit: filters.limit, offset: filters.offset });
+  });
+
+  // Valores válidos para los filtros y el formulario del organizador.
+  router.get('/catalog', (_req, res) => {
+    res.json({ categories: CATEGORIES, cities: CITIES });
   });
 
   // Eventos del organizador autenticado, incluidos borradores y cancelados.

@@ -38,10 +38,12 @@ paths:
   /api/events:
     get:
       tags: [público]
-      summary: Cartelera (solo eventos publicados)
+      summary: Cartelera (eventos publicados que todavía no comenzaron)
       parameters:
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
         - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: city, in: query, schema: { $ref: '#/components/schemas/City' } }
       responses:
         '200':
           description: Lista ordenada por fecha
@@ -65,7 +67,9 @@ paths:
             example:
               title: Noche de Rock Nacional
               description: Las mejores bandas locales
-              venue: Estadio Central
+              venue: Teatro al Aire Libre
+              city: La Paz
+              category: concierto
               startsAt: '2026-12-20T23:00:00Z'
               imageUrl: https://example.com/poster.jpg
               sectors:
@@ -76,6 +80,21 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+
+  /api/events/catalog:
+    get:
+      tags: [público]
+      summary: Valores válidos de categoría y ciudad
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories: { type: array, items: { $ref: '#/components/schemas/Category' } }
+                  cities: { type: array, items: { $ref: '#/components/schemas/City' } }
 
   /api/events/mine:
     get:
@@ -276,6 +295,13 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   schemas:
+    Category:
+      type: string
+      enum: [concierto, electronica, teatro, festival, deportes, fiesta, capacitacion, otros]
+    City:
+      type: string
+      enum: [La Paz, El Alto, Santa Cruz de la Sierra, Cochabamba, Sucre, Oruro, Potosí, Tarija, Trinidad, Cobija]
+
     Error:
       type: object
       properties:
@@ -311,9 +337,11 @@ components:
         title: { type: string }
         description: { type: string }
         venue: { type: string }
+        city: { $ref: '#/components/schemas/City' }
+        category: { $ref: '#/components/schemas/Category' }
         startsAt: { type: string, format: date-time }
         imageUrl: { type: string, nullable: true }
-        currency: { type: string, example: USD }
+        currency: { type: string, example: BOB }
         status: { type: string, enum: [draft, published, cancelled] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -321,11 +349,13 @@ components:
 
     EventCreate:
       type: object
-      required: [title, venue, startsAt]
+      required: [title, venue, city, category, startsAt]
       properties:
         title: { type: string, maxLength: 200 }
         description: { type: string, maxLength: 5000 }
         venue: { type: string, maxLength: 200 }
+        city: { $ref: '#/components/schemas/City' }
+        category: { $ref: '#/components/schemas/Category' }
         startsAt: { type: string, format: date-time, description: Debe ser futura }
         imageUrl: { type: string, nullable: true, description: URL http(s) }
         sectors: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/SectorInput' } }
@@ -338,6 +368,8 @@ components:
         title: { type: string }
         description: { type: string }
         venue: { type: string }
+        city: { $ref: '#/components/schemas/City' }
+        category: { $ref: '#/components/schemas/Category' }
         startsAt: { type: string, format: date-time }
         imageUrl: { type: string, nullable: true }
 
@@ -364,6 +396,7 @@ components:
             id: { type: string, format: uuid }
             title: { type: string }
             venue: { type: string }
+            city: { type: string }
             startsAt: { type: string, format: date-time }
             organizerId: { type: string, format: uuid }
         sector:

@@ -38,6 +38,17 @@ npm run dev                 # desarrollo con recarga
 
 Comprobar: `curl http://127.0.0.1:3002/health` → `{"status":"ok","service":"events"}`.
 
+### Tokens de prueba (mientras auth no exista)
+
+Genera un par de claves de desarrollo en `keys/` (la carpeta no se sube a Git):
+
+```bash
+node -e "const c=require('crypto'),fs=require('fs');const k=c.generateKeyPairSync('rsa',{modulusLength:2048});fs.mkdirSync('keys',{recursive:true});fs.writeFileSync('keys/auth-public.pem',k.publicKey.export({type:'spki',format:'pem'}));fs.writeFileSync('keys/dev-private.pem',k.privateKey.export({type:'pkcs8',format:'pem'}))"
+npm run dev-token -- organizer      # imprime un JWT válido por 8 h (roles: customer, organizer, doorman)
+```
+
+Por defecto el token es del organizador de la semilla (`SEED_ORGANIZER_ID`), así ves sus eventos. En la web, pégalo en `http://localhost:5173/dev/sesion`. Cuando P1 entregue su clave pública, reemplaza `keys/auth-public.pem`.
+
 ### Base de datos local
 
 Con el script de bases de P4, o a mano con `psql` como superusuario:
@@ -95,6 +106,6 @@ Cubren: acceso por rol, ciclo borrador → publicado → cancelado, validaciones
 
 - **P1:** nombres de roles (`customer`, `organizer`, `doorman`), claims (`sub` UUID, `role`, `email`), `iss`/`aud` y algoritmo de firma.
 - **P3:** el contrato de `/internal/reservations` y cómo trata `SOLD_OUT`, `EVENT_NOT_AVAILABLE` y los timeouts.
-- **Todos:** la moneda (`CURRENCY`).
+- **Todos:** la moneda (`CURRENCY`; en desarrollo usamos `BOB`). Las listas de categorías y ciudades están en `src/catalog.ts` y en `apps/web/src/features/events/catalog.ts`: si se agrega una, va en los dos.
 - **P6:** que Nginx conserve el prefijo `/api` y bloquee `/internal/*`.
 - **Fuera de alcance por ahora:** reservas que vencen solas si orders nunca confirma ni libera, y qué pasa con las entradas ya vendidas al cancelar un evento.

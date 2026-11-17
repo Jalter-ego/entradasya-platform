@@ -24,6 +24,7 @@ interface ReservationView {
   released_at: Date | null;
   event_title: string;
   event_venue: string;
+  event_city: string;
   event_starts_at: Date;
   organizer_id: string;
   sector_name: string;
@@ -52,6 +53,7 @@ function toDto(r: ReservationView) {
       id: r.event_id,
       title: r.event_title,
       venue: r.event_venue,
+      city: r.event_city,
       startsAt: r.event_starts_at.toISOString(),
       organizerId: r.organizer_id,
     },
@@ -63,7 +65,7 @@ export type ReservationDto = ReturnType<typeof toDto>;
 
 async function findByOrder(db: Queryable, orderId: string): Promise<ReservationView | undefined> {
   const { rows } = await db.query<ReservationView>(
-    `SELECT r.*, e.title AS event_title, e.venue AS event_venue, e.starts_at AS event_starts_at,
+    `SELECT r.*, e.title AS event_title, e.venue AS event_venue, e.city AS event_city, e.starts_at AS event_starts_at,
             e.organizer_id, s.name AS sector_name
      FROM reservations r
      JOIN events e ON e.id = r.event_id

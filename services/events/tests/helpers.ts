@@ -87,6 +87,8 @@ export function eventBody(overrides: Record<string, unknown> = {}) {
     title: 'Concierto de prueba',
     description: 'Descripción',
     venue: 'Estadio Central',
+    city: 'La Paz',
+    category: 'concierto',
     startsAt: inDays(30),
     imageUrl: 'https://example.com/poster.jpg',
     sectors: [

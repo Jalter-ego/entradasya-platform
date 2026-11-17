@@ -70,7 +70,13 @@ describe('reservar', () => {
       status: 'active',
       releasedAt: null,
     });
-    expect(res.body.event).toMatchObject({ id: eventId, title: 'Concierto de prueba', organizerId: owner.id });
+    expect(res.body.event).toMatchObject({
+      id: eventId,
+      title: 'Concierto de prueba',
+      venue: 'Estadio Central',
+      city: 'La Paz',
+      organizerId: owner.id,
+    });
     expect(res.body.sector).toEqual({ id: sectorId, name: 'Campo' });
     expect(await available(sectorId)).toBe(7);
 
