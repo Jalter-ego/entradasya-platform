@@ -45,7 +45,7 @@ export async function startTestService() {
     issuer: ISSUER,
     audience: AUDIENCE,
   });
-  const app = createApp({ db, verifyToken, internalToken: INTERNAL_TOKEN, currency: 'USD' });
+  const app = createApp({ db, verifyToken, internalToken: INTERNAL_TOKEN, currency: 'BOB' });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ROLES } from '../src/http/auth.js';
-import { eventBody, INTERNAL_TOKEN, startTestService, type TestService } from './helpers.js';
+import { eventBody, inDays, INTERNAL_TOKEN, startTestService, type TestService } from './helpers.js';
 
 let svc: TestService;
 const api = () => request(svc.baseUrl);
@@ -66,7 +66,7 @@ describe('reservar', () => {
       quantity: 3,
       unitPriceMinor: 7500,
       totalMinor: 22500,
-      currency: 'USD',
+      currency: 'BOB',
       status: 'active',
       releasedAt: null,
     });
@@ -83,6 +83,64 @@ describe('reservar', () => {
     const get = await api().get(`/internal/reservations/${orderId}`).set('X-Internal-Token', INTERNAL_TOKEN);
     expect(get.status).toBe(200);
     expect(get.body).toEqual(res.body);
+  });
+
+  it('conserva la copia de evento, sector y precio aunque luego se editen', async () => {
+    const { eventId, sectorId, owner } = await publishedSector(10, 7500);
+    const auth = { Authorization: `Bearer ${owner.token}` };
+    const body = { orderId: randomUUID(), eventId, sectorId, quantity: 2 };
+    const first = await reserve(body).expect(201);
+
+    await api()
+      .patch(`/api/events/${eventId}`)
+      .set(auth)
+      .send({ title: 'Título nuevo', venue: 'Otro lugar', city: 'Sucre', startsAt: inDays(60) })
+      .expect(200);
+    await api()
+      .patch(`/api/events/${eventId}/sectors/${sectorId}`)
+      .set(auth)
+      .send({ name: 'Campo renombrado', priceMinor: 9900 })
+      .expect(200);
+
+    const get = await api().get(`/internal/reservations/${body.orderId}`).set('X-Internal-Token', INTERNAL_TOKEN);
+    expect(get.status).toBe(200);
+    expect(get.body).toEqual(first.body);
+    expect(get.body.event.title).toBe('Concierto de prueba');
+    expect(get.body.sector.name).toBe('Campo');
+    expect(get.body.reservation.unitPriceMinor).toBe(7500);
+
+    const replayed = await reserve(body);
+    expect(replayed.status).toBe(200);
+    expect(replayed.body).toEqual(first.body);
+
+    // Una reserva nueva sí toma los datos actuales.
+    const fresh = await reserve({ ...body, orderId: randomUUID() }).expect(201);
+    expect(fresh.body.event.title).toBe('Título nuevo');
+    expect(fresh.body.sector.name).toBe('Campo renombrado');
+    expect(fresh.body.reservation.unitPriceMinor).toBe(9900);
+  });
+
+  it('una edición simultánea del sector no mezcla precio y nombre en la reserva', async () => {
+    const { eventId, sectorId, owner } = await publishedSector(100, 1000);
+    const auth = { Authorization: `Bearer ${owner.token}` };
+    const reservations = Array.from({ length: 10 }, () =>
+      reserve({ orderId: randomUUID(), eventId, sectorId, quantity: 1 }),
+    );
+    const edit = api()
+      .patch(`/api/events/${eventId}/sectors/${sectorId}`)
+      .set(auth)
+      .send({ name: 'Campo B', priceMinor: 2000 });
+    const [editRes, ...results] = await Promise.all([edit, ...reservations]);
+
+    expect(editRes.status).toBe(200);
+    for (const r of results) {
+      expect(r.status).toBe(201);
+      const pair = [r.body.sector.name, r.body.reservation.unitPriceMinor];
+      expect([
+        ['Campo', 1000],
+        ['Campo B', 2000],
+      ]).toContainEqual(pair);
+    }
   });
 
   it('valida la cantidad (1 a 6) y los ids', async () => {

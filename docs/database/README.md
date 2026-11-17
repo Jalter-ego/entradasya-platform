@@ -84,7 +84,7 @@ La semilla debe ser idempotente. Estos IDs se conservan para que los eventos de 
 
 ## 4. P2 — `events_db`
 
-**Estado:** las tres tablas e índices siguientes ya existen en las [migraciones de events](../../services/events/migrations/). La columna adicional `reservations.snapshot` es un ajuste pendiente, indicado por separado.
+**Estado:** las tres tablas e índices siguientes ya existen en las [migraciones de events](../../services/events/migrations/). La columna `reservations.snapshot` se agrega en la migración `1763600000000_reservation-snapshot.sql`, descrita por separado.
 
 ### Tabla `events`
 
@@ -140,17 +140,17 @@ Restricción existente: `UNIQUE(event_id, name)`. La disponibilidad es `capacity
 
 Índice existente: `(sector_id)`. La API comprueba que el sector pertenece al evento. Reservar descuenta cupos en la misma transacción que crea la reserva; liberar bloquea la reserva y devuelve sus cupos una sola vez. `totalMinor = unit_price_minor * quantity` se calcula; no tiene columna propia.
 
-### Ajuste pendiente de P2: copia inmutable de evento y sector
+### Copia inmutable de evento y sector (`reservations.snapshot`)
 
-Agregar **en una nueva migración**, sin editar las ya compartidas:
+**Estado:** implementado en una nueva migración (`1763600000000_reservation-snapshot.sql`), sin editar las ya compartidas.
 
-| Columna nueva | Tipo PostgreSQL | NULL objetivo | Contenido |
+| Columna | Tipo PostgreSQL | NULL | Contenido |
 |---|---|---|---|
 | `snapshot` | `jsonb` | No | `{ "event": { "id", "title", "venue", "city", "startsAt", "organizerId" }, "sector": { "id", "name" } }`. |
 
 Capturar el snapshot al reservar y confirmarlo en la misma transacción. Las consultas y repeticiones devuelven estos datos guardados, aunque luego se edite el evento o sector. El objeto `reservation` conserva sus campos actuales, incluido el estado mutable de liberación. Debe coordinarse la lectura del sector con sus ediciones para obtener un precio y un nombre coherentes.
 
-Actualmente el servicio obtiene estos datos mediante JOIN con las tablas actuales; **todavía no garantiza una copia histórica estable**. Para filas previas, la migración puede rellenar desde los datos disponibles, indicando que no reconstruye valores históricos que ya fueron sobrescritos; después establece `NOT NULL`. Actualizar código, contrato y pruebas en el mismo cambio.
+Al reservar, events bloquea el evento (`FOR SHARE`) y luego el sector (`FOR NO KEY UPDATE`), y guarda la copia en la misma transacción que crea la reserva; así precio y nombre son coherentes aunque el organizador edite el sector al mismo tiempo. `GET /internal/reservations/{orderId}` y las repeticiones leen solo esta columna, sin JOIN. Restricción: `CHECK` de que `snapshot.event` y `snapshot.sector` son objetos. Las filas anteriores a la migración se rellenaron con los datos que había en ese momento; no se reconstruyen valores históricos ya sobrescritos.
 
 ## 5. P3 — `orders_db`
 

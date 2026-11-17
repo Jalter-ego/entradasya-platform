@@ -11,7 +11,20 @@ export interface ReserveInput {
   quantity: number;
 }
 
-interface ReservationView {
+/** Copia del evento y del sector fijada al reservar (columna reservations.snapshot). */
+export interface ReservationSnapshot {
+  event: {
+    id: string;
+    title: string;
+    venue: string;
+    city: string;
+    startsAt: string;
+    organizerId: string;
+  };
+  sector: { id: string; name: string };
+}
+
+interface ReservationRow {
   id: string;
   order_id: string;
   event_id: string;
@@ -22,19 +35,15 @@ interface ReservationView {
   status: 'active' | 'released';
   created_at: Date;
   released_at: Date | null;
-  event_title: string;
-  event_venue: string;
-  event_city: string;
-  event_starts_at: Date;
-  organizer_id: string;
-  sector_name: string;
+  snapshot: ReservationSnapshot;
 }
 
 /**
- * Respuesta para orders: la reserva más una copia de los datos del evento y del sector
- * que orders, tickets y notifications necesitan sin volver a consultar a events.
+ * Respuesta para orders: la reserva más la copia de evento y sector guardada al reservar.
+ * Esa copia no cambia aunque luego se edite el evento, así orders y tickets pueden
+ * reintentar con los mismos datos sin volver a consultar a events.
  */
-function toDto(r: ReservationView) {
+function toDto(r: ReservationRow) {
   return {
     reservation: {
       id: r.id,
@@ -49,35 +58,20 @@ function toDto(r: ReservationView) {
       createdAt: r.created_at.toISOString(),
       releasedAt: r.released_at?.toISOString() ?? null,
     },
-    event: {
-      id: r.event_id,
-      title: r.event_title,
-      venue: r.event_venue,
-      city: r.event_city,
-      startsAt: r.event_starts_at.toISOString(),
-      organizerId: r.organizer_id,
-    },
-    sector: { id: r.sector_id, name: r.sector_name },
+    event: { ...r.snapshot.event },
+    sector: { ...r.snapshot.sector },
   };
 }
 
 export type ReservationDto = ReturnType<typeof toDto>;
 
-async function findByOrder(db: Queryable, orderId: string): Promise<ReservationView | undefined> {
-  const { rows } = await db.query<ReservationView>(
-    `SELECT r.*, e.title AS event_title, e.venue AS event_venue, e.city AS event_city, e.starts_at AS event_starts_at,
-            e.organizer_id, s.name AS sector_name
-     FROM reservations r
-     JOIN events e ON e.id = r.event_id
-     JOIN sectors s ON s.id = r.sector_id
-     WHERE r.order_id = $1`,
-    [orderId],
-  );
+async function findByOrder(db: Queryable, orderId: string): Promise<ReservationRow | undefined> {
+  const { rows } = await db.query<ReservationRow>(`SELECT * FROM reservations WHERE order_id = $1`, [orderId]);
   return rows[0];
 }
 
 /** Repetición de una reserva ya existente: misma petición -> misma respuesta. */
-function replay(existing: ReservationView, input: ReserveInput) {
+function replay(existing: ReservationRow, input: ReserveInput) {
   const same =
     existing.event_id === input.eventId &&
     existing.sector_id === input.sectorId &&
@@ -96,6 +90,8 @@ function replay(existing: ReservationView, input: ReserveInput) {
  *
  * - La fila de la reserva se inserta primero: la unicidad de order_id hace que dos
  *   pedidos simultáneos de la misma orden se esperen, y solo uno descuenta cupo.
+ * - El evento y el sector se leen bloqueados y su copia (snapshot) se guarda en la misma
+ *   transacción: una edición simultánea del sector espera, y precio y nombre son coherentes.
  * - El descuento es un UPDATE condicional (capacity - reserved >= quantity): dos
  *   compras por el último cupo no pueden ganar ambas. Si no alcanza, ROLLBACK.
  */
@@ -104,31 +100,57 @@ export async function reserve(db: Db, input: ReserveInput) {
   if (existing) return replay(existing, input);
 
   const outcome = await withTransaction(db, async (tx) => {
-    // FOR SHARE sobre el evento: una cancelación simultánea espera a que terminemos.
-    const { rows } = await tx.query<{
+    // Orden de bloqueo: primero el evento y después el sector, igual que al borrar un sector,
+    // para que dos transacciones no se esperen mutuamente.
+    // FOR SHARE sobre el evento: una cancelación o edición simultánea espera a que terminemos.
+    const { rows: events } = await tx.query<{
       status: string;
       starts_at: Date;
       currency: string;
-      price_minor: number;
+      title: string;
+      venue: string;
+      city: string;
+      organizer_id: string;
     }>(
-      `SELECT e.status, e.starts_at, e.currency, s.price_minor
-       FROM sectors s JOIN events e ON e.id = s.event_id
-       WHERE s.id = $1 AND s.event_id = $2
-       FOR SHARE OF e`,
+      `SELECT e.status, e.starts_at, e.currency, e.title, e.venue, e.city, e.organizer_id
+       FROM events e
+       WHERE e.id = $2 AND EXISTS (SELECT 1 FROM sectors s WHERE s.id = $1 AND s.event_id = e.id)
+       FOR SHARE`,
       [input.sectorId, input.eventId],
     );
-    const target = rows[0];
-    if (!target) throw new AppError(404, 'NOT_FOUND', 'Evento o sector no encontrado');
-    if (target.status !== 'published' || target.starts_at.getTime() <= Date.now()) {
+    const event = events[0];
+    if (!event) throw new AppError(404, 'NOT_FOUND', 'Evento o sector no encontrado');
+    if (event.status !== 'published' || event.starts_at.getTime() <= Date.now()) {
       throw new AppError(409, 'EVENT_NOT_AVAILABLE', 'El evento no está a la venta');
     }
 
+    // FOR NO KEY UPDATE sobre el sector: una edición de precio o nombre espera, así el precio
+    // y el nombre guardados en la reserva son coherentes entre sí.
+    const { rows: sectors } = await tx.query<{ name: string; price_minor: number }>(
+      `SELECT name, price_minor FROM sectors WHERE id = $1 AND event_id = $2 FOR NO KEY UPDATE`,
+      [input.sectorId, input.eventId],
+    );
+    const sector = sectors[0];
+    if (!sector) throw new AppError(404, 'NOT_FOUND', 'Evento o sector no encontrado');
+
+    const snapshot: ReservationSnapshot = {
+      event: {
+        id: input.eventId,
+        title: event.title,
+        venue: event.venue,
+        city: event.city,
+        startsAt: event.starts_at.toISOString(),
+        organizerId: event.organizer_id,
+      },
+      sector: { id: input.sectorId, name: sector.name },
+    };
+
     const inserted = await tx.query(
-      `INSERT INTO reservations (order_id, event_id, sector_id, quantity, unit_price_minor, currency)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO reservations (order_id, event_id, sector_id, quantity, unit_price_minor, currency, snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (order_id) DO NOTHING
        RETURNING id`,
-      [input.orderId, input.eventId, input.sectorId, input.quantity, target.price_minor, target.currency],
+      [input.orderId, input.eventId, input.sectorId, input.quantity, sector.price_minor, event.currency, snapshot],
     );
     if (inserted.rowCount === 0) return 'race' as const; // otra petición de la misma orden ganó
 

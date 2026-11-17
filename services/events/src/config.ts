@@ -36,7 +36,7 @@ export function loadConfig(): Config {
   if (!/^[a-z_][a-z0-9_]*$/.test(dbSchema)) {
     throw new Error('DB_SCHEMA solo admite minúsculas, números y _');
   }
-  const currency = (process.env.CURRENCY || 'USD').toUpperCase();
+  const currency = (process.env.CURRENCY || 'BOB').toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new Error('CURRENCY debe ser un código ISO de 3 letras');
 
   const internalTokenOrders = required('INTERNAL_TOKEN_ORDERS');

@@ -216,6 +216,7 @@ paths:
       description: |
         - 201: reserva creada. 200: misma petición repetida, devuelve la misma reserva sin descontar otra vez.
         - El precio lo decide events y queda fijado en la reserva (`unitPriceMinor`, `totalMinor`).
+        - `event` y `sector` son una copia tomada al reservar: no cambian aunque luego se edite el evento o el sector.
         - Si hay un timeout, orders puede repetir la petición o consultar `GET /internal/reservations/{orderId}`.
       security: [{ internal: [] }]
       requestBody:
@@ -288,7 +289,7 @@ components:
       description: Evento
       content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } }
     Reservation:
-      description: Reserva con copia de datos de evento y sector
+      description: Reserva con la copia de evento y sector guardada al reservar (inmutable)
       content: { application/json: { schema: { $ref: '#/components/schemas/Reservation' } } }
     Error:
       description: Error

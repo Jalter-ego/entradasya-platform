@@ -83,7 +83,7 @@ describe('ciclo de vida del evento', () => {
     const owner = await svc.newUser();
     const event = await createEvent(owner.token);
     expect(event.status).toBe('draft');
-    expect(event.currency).toBe('USD');
+    expect(event.currency).toBe('BOB');
     expect(event.organizerId).toBe(owner.id);
     expect(event.sectors).toHaveLength(2);
 

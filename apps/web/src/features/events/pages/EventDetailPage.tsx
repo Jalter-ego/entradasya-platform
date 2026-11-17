@@ -40,6 +40,7 @@ export function EventDetailPage() {
 
   const e = event.data!;
   const isOwner = user?.id === e.organizerId;
+  const onSale = e.status === 'published' && new Date(e.startsAt).getTime() > Date.now();
   const { day, month } = dayAndMonth(e.startsAt);
 
   return (
@@ -72,9 +73,11 @@ export function EventDetailPage() {
                   {e.venue}, {e.city}
                 </span>
               </p>
-              <a href="#comprar" className="btn btn--primary">
-                Comprar entradas
-              </a>
+              {onSale && (
+                <a href="#comprar" className="btn btn--primary">
+                  Comprar entradas
+                </a>
+              )}
             </div>
           </div>
         </div>
