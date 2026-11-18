@@ -132,7 +132,7 @@ Cada base tiene un usuario diferente con permisos únicamente sobre sus propios 
 
 El [README de bases de datos](database/README.md) define las seis bases, sus usuarios, tablas, columnas, tipos, nulabilidad, restricciones, índices y estados. También establece las referencias externas, snapshots e idempotencia del flujo de compra. Cada integrante debe consultar su sección antes de implementar o modificar migraciones; P4 prepara bases y permisos, no las tablas de todos.
 
-Las tablas existentes de events y tickets se toman como punto de partida. Los diseños de auth, orders, payments y checkin, y el snapshot inmutable de reservas, están identificados como trabajo pendiente. Documentar el modelo no ejecuta migraciones ni implica que el flujo esté integrado. Las discrepancias se resuelven actualizando esquema, migraciones y contratos en el mismo cambio, sin editar migraciones ya compartidas.
+Las tablas existentes de events y tickets se tomaron como punto de partida. El README de bases indica el estado de cada servicio y enlaza sus migraciones. P1 agrega su migración de `users` y el contrato de autenticación. Las discrepancias se resuelven actualizando esquema, migraciones y contratos en el mismo cambio, sin editar migraciones ya compartidas.
 
 ### Convenciones comunes de implementación
 
@@ -172,13 +172,15 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P1 - Autenticación y acceso
 
-- [ ] A1. Inicializar auth: conexión a `auth_db`, tabla `users` conforme al [esquema P1](database/README.md#3-p1--auth_db), migraciones, `.env.example` y scripts de ejecución.
-- [ ] A2. Implementar configuración, `/health`, logs y manejo de errores de auth. Cada responsable prepara estos elementos en su propio servicio.
-- [ ] A3. Implementar y documentar el contrato de autenticación y JWT fijado en el README de bases; verificarlo con los servicios consumidores. Los cambios de contrato se coordinan entre todos.
-- [ ] A4. Implementar registro e inicio de sesión; contraseñas con hash seguro y JWT firmado. Cada servicio valida localmente firma, expiración y claims acordados.
-- [ ] A5. Registro público solo de clientes. Crear organizador y portero mediante una semilla/script de demo, sin permitir elevar el rol desde el formulario público.
-- [ ] A6. Implementar sesión, cierre de sesión, rutas por rol y navegación base de la web. Mantener la sesión al recargar y gestionar token vencido.
-- [ ] A7. Documentar el arranque de auth y apoyar la integración del acceso con los demás servicios. Cada integrante documenta su componente y escribe su sección de la bitácora y contribuciones.
+- [x] A1. Inicializar auth: conexión a `auth_db`, tabla `users` conforme al [esquema P1](database/README.md#3-p1--auth_db), migraciones, `.env.example` y scripts de ejecución.
+- [x] A2. Implementar configuración, `/health`, logs y manejo de errores de auth. Cada responsable prepara estos elementos en su propio servicio.
+- [x] A3. Implementar y documentar el contrato de autenticación y JWT fijado en el README de bases; verificarlo con los servicios consumidores. Los cambios de contrato se coordinan entre todos.
+- [x] A4. Implementar registro e inicio de sesión; contraseñas con hash seguro y JWT firmado. Cada servicio valida localmente firma, expiración y claims acordados.
+- [x] A5. Registro público solo de clientes. Crear organizador y portero mediante una semilla/script de demo, sin permitir elevar el rol desde el formulario público.
+- [x] A6. Implementar sesión, cierre de sesión, rutas por rol y navegación base de la web. Mantener la sesión al recargar y gestionar token vencido.
+- [x] A7. Documentar el arranque de auth y apoyar la integración del acceso con los demás servicios. Cada integrante documenta su componente y escribe su sección de la bitácora y contribuciones.
+
+Implementación, arranque y verificación en [P1 · Autenticación y acceso](P1_Autenticacion_y_Acceso.md).
 
 **Contrato temprano:** entregar un token de ejemplo válido y claves de verificación durante las primeras dos horas. Usar los claims, roles e IDs de semilla del README de bases: `sub` UUID, `role`, `email`, `iss=entradasya-auth`, `aud=entradasya`, `iat` y `exp`, con firma `RS256`. El correo firmado permite a orders preparar la confirmación sin consultar auth. La clave privada queda solo en auth y la pública en los consumidores. No incluir claves reales en Git.
 

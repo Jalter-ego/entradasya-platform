@@ -38,16 +38,9 @@ npm run dev                 # desarrollo con recarga
 
 Comprobar: `curl http://127.0.0.1:3002/health` → `{"status":"ok","service":"events"}`.
 
-### Tokens de prueba (mientras auth no exista)
+### JWT de auth (P1)
 
-Genera un par de claves de desarrollo en `keys/` (la carpeta no se sube a Git):
-
-```bash
-node -e "const c=require('crypto'),fs=require('fs');const k=c.generateKeyPairSync('rsa',{modulusLength:2048});fs.mkdirSync('keys',{recursive:true});fs.writeFileSync('keys/auth-public.pem',k.publicKey.export({type:'spki',format:'pem'}));fs.writeFileSync('keys/dev-private.pem',k.privateKey.export({type:'pkcs8',format:'pem'}))"
-npm run dev-token -- organizer      # imprime un JWT válido por 8 h (roles: customer, organizer, doorman)
-```
-
-Por defecto el token es del organizador de la semilla (`SEED_ORGANIZER_ID`), así ves sus eventos. En la web, pégalo en `http://localhost:5173/dev/sesion`. Cuando P1 entregue su clave pública, reemplaza `keys/auth-public.pem`.
+Configura `JWT_PUBLIC_KEY_FILE` con el PEM público del [servicio auth](../auth/README.md) y usa su mismo emisor y audiencia. La cuenta sembrada `organizador@demo.bo` usa el UUID de `SEED_ORGANIZER_ID` por defecto y puede ver sus eventos desde la web.
 
 ### Base de datos local
 

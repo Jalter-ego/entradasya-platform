@@ -26,7 +26,7 @@ check_url() {
   fi
 }
 
-check_url "auth"          "http://127.0.0.1:3001/health" 0
+check_url "auth"          "http://127.0.0.1:3001/health" 1
 check_url "events"        "http://127.0.0.1:3002/health" 1
 check_url "orders"        "http://127.0.0.1:3003/health" 0
 check_url "payments"      "http://127.0.0.1:3004/health" 0

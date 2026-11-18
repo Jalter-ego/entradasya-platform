@@ -1,9 +1,6 @@
 /**
  * Panel del organizador (P2), con la misma estructura que el Control Center de attendance:
  * barra lateral con navegación, barra superior con ubicación y perfil, contenido y pie.
- *
- * Es un EJEMPLO para el equipo: P1 puede generalizarlo para todos los roles
- * (organizador, portero, etc.) agregando sus enlaces en `navigation`.
  */
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../../../shared/session';

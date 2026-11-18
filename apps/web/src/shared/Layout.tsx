@@ -1,12 +1,15 @@
-/**
- * Marco PROVISORIO de la aplicación (encabezado y pie). La navegación por rol definitiva
- * es de P1; cada feature agrega aquí su enlace.
- */
-import { Link, NavLink, Outlet } from 'react-router-dom';
-import { useSession } from './session';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { roleLinks } from '../features/auth/navigation';
+import { useSession } from '../features/auth/session';
 
 export function Layout() {
   const { user, signOut } = useSession();
+  const navigate = useNavigate();
+
+  function logout() {
+    signOut();
+    navigate('/', { replace: true });
+  }
 
   return (
     <div className="app">
@@ -25,18 +28,17 @@ export function Layout() {
             <NavLink to="/" end>
               Cartelera
             </NavLink>
-            {user?.role === 'organizer' && <NavLink to="/organizador/eventos">Mis eventos</NavLink>}
-            {user?.role === 'customer' && <NavLink to="/mis-compras">Mis compras</NavLink>}
-            {user?.role === 'customer' && <NavLink to="/mis-entradas">Mis entradas</NavLink>}
-            {user?.role === 'doorman' && <NavLink to="/porteria">Portería</NavLink>}
+            {user && roleLinks[user.role].map(({ path, label }) => (
+              <NavLink key={path} to={path}>{label}</NavLink>
+            ))}
           </nav>
           <div className="site-header__session">
             {user ? (
               <>
                 <span className="site-header__user" title={user.email}>
-                  {user.email ?? 'Sesión iniciada'}
+                  {user.email}
                 </span>
-                <button type="button" className="btn btn--ghost-light btn--sm" onClick={signOut}>
+                <button type="button" className="btn btn--ghost-light btn--sm" onClick={logout}>
                   Cerrar sesión
                 </button>
               </>

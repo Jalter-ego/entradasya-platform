@@ -1,6 +1,5 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { devAuth } from './dev-auth';
 
 const service = (envName: string, port: number) => ({
   target: process.env[envName] ?? `http://127.0.0.1:${port}`,
@@ -8,7 +7,7 @@ const service = (envName: string, port: number) => ({
 });
 
 export default defineConfig({
-  plugins: [react(), devAuth()],
+  plugins: [react()],
   server: {
     port: 5173,
     proxy: {

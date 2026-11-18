@@ -54,7 +54,7 @@ Los servicios se comunican por HTTP y conservan las copias de datos necesarias. 
 
 ## 3. P1 — `auth_db`
 
-**Estado:** diseño por implementar; todavía no hay migraciones de auth en `master`.
+**Estado:** implementado en la [migración de auth](../../services/auth/migrations/1763800000000_init-users.sql).
 
 ### Tabla `users`
 
@@ -72,7 +72,7 @@ Además del `UNIQUE(email)`, agregar `CHECK (email = lower(btrim(email)))`. La A
 
 JWT de integración: algoritmo `RS256`, `iss=entradasya-auth`, `aud=entradasya`, `sub=users.id`, `role`, `email`, `iat` y `exp`. Solo auth conserva la clave privada; los consumidores verifican la firma con la pública. No se necesita una tabla de sesiones para esta v1.
 
-IDs de la semilla compartida, compatibles con el login de desarrollo actual:
+IDs de la semilla de auth, compatibles con los datos de demo existentes:
 
 | Cuenta | Rol | UUID |
 |---|---|---|
@@ -351,7 +351,7 @@ El formato exacto de cada petición/respuesta y sus errores se mantiene en OpenA
 
 | Responsable | Trabajo derivado de este esquema |
 |---|---|
-| P1 | Crear `users`, semilla con IDs compartidos y contrato JWT acordado. |
+| P1 | Implementó `users`, la semilla con IDs compartidos y el [contrato JWT](../../contracts/auth.openapi.yaml). |
 | P2 | Conservar tablas existentes; agregar y consumir el snapshot inmutable de reservas con nueva migración. |
 | P3 | Crear `orders` y `order_items`; persistir idempotencia, avance y cuerpo de emisión. |
 | P4 | Preparar las seis bases/usuarios; crear payments y acordar su contrato con orders. Notifications sigue sin base. |

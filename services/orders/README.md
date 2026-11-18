@@ -46,9 +46,9 @@ El servidor no crea tablas al arrancar: si faltan las migraciones, no levanta. T
 
 Para detener el servicio, usar `Ctrl+C`; las órdenes quedan guardadas en la base.
 
-### Clave JWT mientras auth no exista
+### Clave JWT de auth (P1)
 
-Usar el par de desarrollo **compartido** del equipo, en `services/events/keys/`. Lo usan también el login de prueba de la web y `dev-token`; su generación se explica en el [README de events](../events/README.md). Copiar `services/events/keys/auth-public.pem` a `services/orders/keys/auth-public.pem`. No generar un par propio, porque los tokens de la web no lo aceptarían. Cuando P1 entregue su clave pública, reemplazar ese archivo.
+Configurar `JWT_PUBLIC_KEY_FILE` con el PEM público del [servicio auth](../auth/README.md), usando el mismo emisor y audiencia. Orders toma el UUID, el correo y el rol del JWT tras verificarlo localmente.
 
 ## Variables
 

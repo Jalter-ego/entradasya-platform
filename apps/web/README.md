@@ -18,13 +18,14 @@ En desarrollo, Vite reenvía cada API a su servicio con los puertos del plan: au
 ```text
 src/
 ├── App.tsx              # rutas
-├── shared/              # piezas comunes (provisorias; ver abajo)
+├── shared/              # piezas comunes
 │   ├── api.ts           # fetch con el formato de error acordado
-│   ├── session.tsx      # sesión: la reemplaza P1
-│   ├── Layout.tsx       # encabezado y pie: P1 define la navegación por rol
+│   ├── session.ts       # acceso compartido a la sesión de P1
+│   ├── Layout.tsx       # encabezado, pie y navegación por rol
 │   └── ...
 ├── styles/global.css    # colores, tipografía y componentes base
 └── features/
+    ├── auth/            # P1: registro, login, sesión y rutas por rol
     ├── checkin/         # P6: portería, lectura QR, resultado y conteo
     ├── events/          # P2: cartelera, detalle, organizador
     ├── orders/          # P3: checkout, resultado y Mis compras
@@ -34,9 +35,9 @@ src/
 
 Cada integrante trabaja en `src/features/<su-feature>/` y agrega sus rutas en `App.tsx`.
 
-## Login de prueba (solo desarrollo)
+## Feature auth (P1)
 
-Mientras no exista el servicio auth, `npm run dev` incluye un login de prueba (`dev-auth.ts`) que firma tokens con `services/events/keys/dev-private.pem`. No forma parte del build.
+La pantalla `/login` usa `/api/auth/login` y `/api/auth/register`. Levantar [auth](../../services/auth/README.md) para ingresar o registrar un cliente.
 
 | Cuenta | Rol |
 |---|---|
@@ -44,7 +45,9 @@ Mientras no exista el servicio auth, `npm run dev` incluye un login de prueba (`
 | `cliente@demo.bo` | Cliente |
 | `portero@demo.bo` | Portero |
 
-Contraseña de todas: `demo1234`. La pantalla `/login` las muestra con un botón para completar el formulario.
+Las cuentas de demo se habilitan con `npm run seed` en auth. Usar la contraseña elegida al sembrarlas.
+
+El navegador conserva la sesión al recargar y la limpia al vencer el JWT o al cerrar sesión. `RequireRole` protege las vistas, y cada API comprueba la firma y autoriza la operación en el servidor.
 
 ## Feature events (P2)
 
@@ -58,7 +61,7 @@ Contraseña de todas: `demo1234`. La pantalla `/login` las muestra con un botón
 
 ### Lo que espera de otros
 
-- **P1 (auth):** reemplazar `shared/session.tsx` conservando `useSession()` → `{ token, user, signIn, signOut }`, y el encabezado. La pantalla `/login` (`shared/LoginPage.tsx`) se puede reutilizar: solo hay que cambiar `LOGIN_URL` en `shared/authApi.ts` a `/api/auth/login` y borrar `dev-auth.ts`.
+- **P1 (auth):** `useSession()` aporta el JWT y el rol del organizador. Events verifica el JWT con el PEM público de auth.
 - **P3 (orders):** ✅ `/checkout` ya está implementado (ver la feature orders). El reporte `GET /api/orders/reports/events/:eventId` se adapta en `eventsApi.salesReport` a la forma de `SalesReport` que usa el panel: desenvuelve `data`, renombra `ordersPaid` → `paidOrders` y `sectors` → `bySector`, y usa la moneda del evento cuando no hay ventas. Si orders no responde, el panel muestra los lugares reservados.
 
 ## Feature orders (P3)
@@ -100,10 +103,10 @@ La etiqueta «Emitida» confirma la emisión; no indica si la entrada ya se util
 
 ### Probar antes de que exista orders
 
-Se puede desarrollar/probar esta pantalla sin P1 ni P3: el login provisional permite entrar como cliente y tickets puede emitir entradas de demo por su API interna. Sin entradas emitidas se muestra una lista vacía; events no es necesario para consultar o descargar entradas ya emitidas.
+Se puede probar esta pantalla con auth y tickets. La API interna de tickets permite preparar entradas de demo para `cliente@demo.bo`.
 
 1. Configurar/migrar y levantar `services/tickets` siguiendo su README.
-2. Verificar que su clave pública corresponda a la clave de desarrollo usada por el login web (`services/events/keys/dev-private.pem`), con el mismo issuer/audience. No generar un par diferente para cada servicio.
+2. Configurar el PEM público de auth en tickets, con el mismo emisor y audiencia. Migrar auth y sembrar sus cuentas de demo.
 3. Para crear dos entradas de demo **en el servicio local**, ejecutar desde `services/tickets`, en otra terminal con Node 22.11 o superior:
 
 ```bash
@@ -139,10 +142,10 @@ NODE
 
 Este comando crea registros/PDF de prueba y simula la llamada de orders; no procesa una compra ni reserva cupos. Usa UUID y fecha fijos para que repetirlo conserve las mismas dos entradas. No cambiar el cuerpo con ese mismo `orderId`; para otro caso de prueba, usar un UUID de orden nuevo. La credencial interna se lee del `.env` del backend y nunca se publica en la configuración del frontend.
 
-4. Levantar la web e iniciar sesión como `cliente@demo.bo` / `demo1234`.
+4. Levantar la web e iniciar sesión como `cliente@demo.bo` con la contraseña configurada al sembrar auth.
 5. Abrir `/mis-entradas`, descargar ambos PDF y comprobar el QR. También puede usarse `/mis-entradas?orderId=40000000-0000-4000-8000-000000000005`.
 
-Para P1: conservar `useSession()` o actualizar sus consumidores al reemplazar el acceso. Para P3: emitir usando el contrato de tickets y enlazar `/mis-entradas?orderId=<UUID>` desde el resultado de compra. P4 puede usar `/mis-entradas` como enlace en el correo; el usuario inicia sesión, sin JWT en la URL. P6 debe conservar `/api/tickets` al configurar Nginx y servir la SPA también en `/mis-entradas`.
+Para P3: emitir usando el contrato de tickets y enlazar `/mis-entradas?orderId=<UUID>` desde el resultado de compra. P4 puede usar `/mis-entradas` como enlace en el correo; el usuario inicia sesión, sin JWT en la URL. P6 debe conservar `/api/tickets` al configurar Nginx y servir la SPA también en `/mis-entradas`.
 
 ### Verificación local del frontend
 
@@ -160,4 +163,4 @@ Las pruebas de tickets usan el ejecutor de Node y el compilador TypeScript ya in
 |---|---|
 | `/porteria` | Portería (`role=doorman`): selector de evento publicado, entrada manual o lector QR (teclado / cámara opcional), resultado claro (`APROBADO`, `ALREADY_USED` con hora del primer ingreso, `WRONG_EVENT`, `INVALID_TICKET`) y conteo en vivo. |
 
-El enlace aparece en el encabezado para `role=doorman` y el inicio de sesión redirige automáticamente a `/porteria` con esa cuenta (`portero@demo.bo` / `demo1234`).
+El enlace aparece en el encabezado para `role=doorman`. Al iniciar sesión con la cuenta sembrada `portero@demo.bo`, la ruta inicial es `/porteria`.
