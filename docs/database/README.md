@@ -154,7 +154,7 @@ Al reservar, events bloquea el evento (`FOR SHARE`) y luego el sector (`FOR NO K
 
 ## 5. P3 — `orders_db`
 
-**Estado:** implementado en la [migración de orders](../../services/orders/migrations/1763700000000_init-orders.sql), con las tablas, restricciones, estados e índices de esta sección. El flujo y su recuperación se describen en el [README de orders](../../services/orders/README.md). Las integraciones con payments y notifications siguen un contrato provisional hasta que P4 publique el suyo. Una orden compra de 1 a 6 entradas de **un solo sector de un evento**; por eso hay como máximo un registro `order_items` por orden en v1.
+**Estado:** implementado en la [migración de orders](../../services/orders/migrations/1763700000000_init-orders.sql), con las tablas, restricciones, estados e índices de esta sección. El flujo y su recuperación se describen en el [README de orders](../../services/orders/README.md). P4 publicó los contratos de payments y notifications ([`payments.openapi.yaml`](../../contracts/payments.openapi.yaml), [`notifications.openapi.yaml`](../../contracts/notifications.openapi.yaml)), compatibles con los cuerpos que ya envían los clientes de orders. Una orden compra de 1 a 6 entradas de **un solo sector de un evento**; por eso hay como máximo un registro `order_items` por orden en v1.
 
 ### Tabla `orders`
 
@@ -217,7 +217,7 @@ El total se deriva de `quantity * unit_price_minor`; para sumas SQL usar `bigint
 
 ## 6. P4 — `payments_db` y notifications
 
-**Estado:** diseño por implementar. Payments es interno y solo acepta llamadas autenticadas de orders.
+**Estado:** implementado en la [migración de payments](../../services/payments/migrations/1763800000000_init-payments.sql), con la tabla, restricciones y `CHECK` de esta sección. Payments es interno y solo acepta llamadas de orders con su token; contrato en [`payments.openapi.yaml`](../../contracts/payments.openapi.yaml) y detalle en el [README de payments](../../services/payments/README.md). La creación de las seis bases y usuarios está en [`infra/postgres`](../../infra/postgres/README.md).
 
 ### Tabla `payments`
 
@@ -243,6 +243,8 @@ No guardar PAN completo, CVV ni datos de tarjetas reales. `PaymentFields` pide �
 ### Notifications no tiene base propia
 
 Recibe el correo validado, resumen de compra y enlace a Mis entradas; envía a Mailpit. Orders conserva `notification_status` y el error. SMTP no garantiza envío exactamente una vez: un timeout puede dejar resultado `unknown`, y un reintento podría duplicar el correo. Eso no duplica órdenes, pagos ni entradas y no revierte la compra.
+
+**Estado:** implementado en [`services/notifications`](../../services/notifications/README.md), sin base de datos; contrato en [`notifications.openapi.yaml`](../../contracts/notifications.openapi.yaml). Mailpit se instala como binario según [`infra/mailpit`](../../infra/mailpit/README.md).
 
 ## 7. P5 — `tickets_db`
 
@@ -343,7 +345,7 @@ P3 construye explícitamente este cuerpo: copia `orderId`, `quantity`, `unitPric
 
 **`city` permanece en el snapshot de la reserva y en orders, pero no se envía a tickets en el contrato actual.** Su esquema rechaza campos adicionales. Si se necesita ciudad en el PDF, P3 y P5 actualizan juntos este README, el OpenAPI, la validación y el renderizado antes de comenzar a enviarla.
 
-El formato exacto de cada petición/respuesta y sus errores se mantiene en OpenAPI. Este README fija el modelo de datos y los nombres comunes; los archivos [`events.openapi.yaml`](../../contracts/events.openapi.yaml), [`orders.openapi.yaml`](../../contracts/orders.openapi.yaml) y [`tickets.openapi.yaml`](../../contracts/tickets.openapi.yaml) describen los endpoints actuales. P1, P4 y P6 deben agregar los de sus servicios.
+El formato exacto de cada petición/respuesta y sus errores se mantiene en OpenAPI. Este README fija el modelo de datos y los nombres comunes; los archivos [`events.openapi.yaml`](../../contracts/events.openapi.yaml), [`orders.openapi.yaml`](../../contracts/orders.openapi.yaml), [`tickets.openapi.yaml`](../../contracts/tickets.openapi.yaml), [`payments.openapi.yaml`](../../contracts/payments.openapi.yaml) y [`notifications.openapi.yaml`](../../contracts/notifications.openapi.yaml) describen los endpoints actuales. P1 y P6 deben agregar los de sus servicios.
 
 ## 10. Implementación y control de cambios
 
