@@ -32,6 +32,70 @@ export const REMOTE_UNAVAILABLE = {
   INVALID_RESPONSE: 'INVALID_RESPONSE',
 } as const;
 
+export const MAX_TICKETS_PER_ORDER = 6;
+
+export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
+
+export const DEMO_PAYMENT = {
+  METHOD: 'demo_card',
+  APPROVE_LAST4: '1111',
+  REJECT_LAST4: '0000',
+} as const;
+
+/** Estados de docs/database/README.md §5. Deben coincidir con los CHECK de la migración. */
+export const ORDER_STATUS = {
+  PENDING: 'pending',
+  PAID: 'paid',
+  REJECTED: 'rejected',
+  CANCELLED: 'cancelled',
+} as const;
+
+export const RESERVATION_STATUS = {
+  NOT_STARTED: 'not_started',
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  RELEASE_PENDING: 'release_pending',
+  RELEASED: 'released',
+  FAILED: 'failed',
+} as const;
+
+export const PAYMENT_STATUS = {
+  NOT_STARTED: 'not_started',
+  PENDING: 'pending',
+  UNKNOWN: 'unknown',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+} as const;
+
+export const TICKET_STATUS = {
+  NOT_STARTED: 'not_started',
+  PENDING: 'pending',
+  ISSUED: 'issued',
+} as const;
+
+export const NOTIFICATION_STATUS = {
+  NOT_STARTED: 'not_started',
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed',
+  UNKNOWN: 'unknown',
+} as const;
+
+export const ERROR_STEP = {
+  RESERVATION: 'reservation',
+  PAYMENT: 'payment',
+  TICKETS: 'tickets',
+  NOTIFICATION: 'notification',
+} as const;
+
+type Values<T> = T[keyof T];
+export type OrderStatus = Values<typeof ORDER_STATUS>;
+export type ReservationStatus = Values<typeof RESERVATION_STATUS>;
+export type PaymentStatus = Values<typeof PAYMENT_STATUS>;
+export type TicketStatus = Values<typeof TICKET_STATUS>;
+export type NotificationStatus = Values<typeof NOTIFICATION_STATUS>;
+export type ErrorStep = Values<typeof ERROR_STEP>;
+
 export const PAGINATION = {
   defaultPerPage: 10,
   maxPerPage: 100,
