@@ -95,6 +95,11 @@ export const eventsApi = {
     api<EventItem>(base, { method: 'POST', token, body }),
   update: (token: Token, id: string, body: Partial<EventInput>) =>
     api<EventItem>(`${base}/${id}`, { method: 'PATCH', token, body }),
+  uploadCover: (token: Token, id: string, file: File) => {
+    const body = new FormData();
+    body.append('image', file);
+    return api<EventItem>(`${base}/${id}/cover`, { method: 'POST', token, body });
+  },
   publish: (token: Token, id: string) => api<EventItem>(`${base}/${id}/publish`, { method: 'POST', token }),
   cancel: (token: Token, id: string) => api<EventItem>(`${base}/${id}/cancel`, { method: 'POST', token }),
   addSector: (token: Token, id: string, body: SectorInput) =>

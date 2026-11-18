@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { CoverStore } from './covers.js';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { createJwtVerifier } from './http/auth.js';
@@ -19,7 +20,10 @@ const verifyToken = await createJwtVerifier({
   audience: config.jwt.audience,
 });
 
+const covers = new CoverStore(config.coverStorageDir);
+await covers.ready();
 const app = createApp({
+  covers,
   db,
   verifyToken,
   internalToken: config.internalTokenOrders,

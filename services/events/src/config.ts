@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 
 export interface Config {
   port: number;
@@ -16,6 +18,7 @@ export interface Config {
   internalTokenOrders: string;
   /** Moneda acordada por el equipo (ISO 4217). */
   currency: string;
+  coverStorageDir: string;
 }
 
 function required(name: string): string {
@@ -58,5 +61,6 @@ export function loadConfig(): Config {
     },
     internalTokenOrders,
     currency,
+    coverStorageDir: resolve(process.env.EVENTS_STORAGE_DIR || resolve(homedir(), '.local/share/entradasya/event-covers')),
   };
 }

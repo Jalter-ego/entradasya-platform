@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
+import { COVER_BODY_LIMIT, CoverStore, parseCover } from '../covers.js';
 import { z } from 'zod';
 import { CATEGORIES, CITIES } from '../catalog.js';
 import type { Db } from '../db.js';
@@ -61,9 +62,36 @@ const listQuery = z.object({
   city: z.enum(CITIES).optional(),
 });
 
-export function eventsRouter(db: Db, verify: VerifyToken, currency: string): Router {
+export function eventsRouter(db: Db, verify: VerifyToken, currency: string, covers?: CoverStore): Router {
   const router = Router();
   const organizer = requireRole(verify, ROLES.ORGANIZER);
+
+  router.get('/covers/:name', async (req, res) => {
+    if (!covers) throw new AppError(503, 'COVER_STORAGE_UNAVAILABLE', 'Almacenamiento no configurado.');
+    const image = await covers.read(String(req.params.name));
+    res.set({ 'Content-Type': image.mime, 'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'public, max-age=31536000, immutable' }).send(image.bytes);
+  });
+
+  router.post('/:id/cover', organizer, async (req, _res, next) => {
+    if (!covers) throw new AppError(503, 'COVER_STORAGE_UNAVAILABLE', 'Almacenamiento no configurado.');
+    await repo.assertEditable(db, req.user!, String(req.params.id));
+    if (!req.is('multipart/form-data')) throw new AppError(415, 'INVALID_IMAGE', 'Envía la imagen como multipart/form-data.');
+    next();
+  }, express.raw({ type: 'multipart/form-data', limit: COVER_BODY_LIMIT, inflate: false }), async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'INVALID_MULTIPART', 'Falta el archivo.');
+    const image = await parseCover(req.body, req.get('content-type')!);
+    const url = await covers!.save(image);
+    let result;
+    try {
+      result = await repo.updateEventWithPreviousImage(db, req.user!, String(req.params.id), { imageUrl: url });
+    } catch (err) {
+      await covers!.remove(url);
+      throw err;
+    }
+    await covers!.remove(result.previousImageUrl);
+    res.json(result.event);
+  });
 
   // Cartelera pública: eventos publicados que todavía no comenzaron.
   router.get('/', async (req, res) => {
@@ -95,7 +123,9 @@ export function eventsRouter(db: Db, verify: VerifyToken, currency: string): Rou
   });
 
   router.patch('/:id', organizer, async (req, res) => {
-    res.json(await repo.updateEvent(db, req.user!, String(req.params.id), patchEventSchema.parse(req.body)));
+    const result = await repo.updateEventWithPreviousImage(db, req.user!, String(req.params.id), patchEventSchema.parse(req.body));
+    if (result.previousImageUrl !== result.event.imageUrl) await covers?.remove(result.previousImageUrl);
+    res.json(result.event);
   });
 
   router.post('/:id/publish', organizer, async (req, res) => {

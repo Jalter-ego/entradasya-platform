@@ -1,4 +1,5 @@
 import express from 'express';
+import type { CoverStore } from './covers.js';
 import type { Db } from './db.js';
 import type { VerifyToken } from './http/auth.js';
 import { errorHandler, notFoundHandler, requestContext } from './http/errors.js';
@@ -10,9 +11,10 @@ export interface AppDeps {
   verifyToken: VerifyToken;
   internalToken: string;
   currency: string;
+  covers?: CoverStore;
 }
 
-export function createApp({ db, verifyToken, internalToken, currency }: AppDeps) {
+export function createApp({ db, verifyToken, internalToken, currency, covers }: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
@@ -35,7 +37,7 @@ export function createApp({ db, verifyToken, internalToken, currency }: AppDeps)
   });
 
   // Nginx conserva el prefijo /api (proxy_pass sin barra final).
-  app.use('/api/events', eventsRouter(db, verifyToken, currency));
+  app.use('/api/events', eventsRouter(db, verifyToken, currency, covers));
   app.use('/internal', internalRouter(db, internalToken));
 
   app.use(notFoundHandler);
