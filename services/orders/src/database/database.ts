@@ -17,6 +17,10 @@ export function createPool(): Db {
   });
 }
 
+export async function checkSchema(db: Db): Promise<void> {
+  await db.query('SELECT 1 FROM orders o LEFT JOIN order_items i ON i.order_id = o.id LIMIT 1');
+}
+
 export async function transaction<T>(db: Db, fn: (client: Tx) => Promise<T>): Promise<T> {
   const client = await db.connect();
   try {
