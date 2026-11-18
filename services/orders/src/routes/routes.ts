@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import type { Clients } from '../clients/clients.js';
 import { ERROR_CODES, SERVICE_NAME } from '../constants/constants.js';
+import { OrdersController } from '../controllers/ordersController.js';
 import { checkSchema, type Db } from '../database/database.js';
+import { OrdersRepository } from '../repositories/ordersRepository.js';
+import { OrderProcessor } from '../services/orderProcessor.js';
+import { PurchaseService } from '../services/purchaseService.js';
 import type { VerifyToken } from '../types/auth.js';
 import { ApiResponse } from '../utils/apiResponse.js';
+import { ordersRoutes } from './ordersRoutes.js';
 
 export interface RouteDeps {
   db: Db;
@@ -11,8 +16,12 @@ export interface RouteDeps {
   clients: Clients;
 }
 
-export function createRoutes({ db }: RouteDeps): Router {
+export function createRoutes({ db, verifyToken, clients }: RouteDeps): Router {
   const router = Router();
+
+  const repo = new OrdersRepository(db);
+  const purchases = new PurchaseService(repo, new OrderProcessor(db, repo, clients));
+  const ordersController = new OrdersController(repo, purchases);
 
   router.get('/health', async (_req, res) => {
     try {
@@ -23,6 +32,7 @@ export function createRoutes({ db }: RouteDeps): Router {
     }
   });
 
+  router.use('/api/orders', ordersRoutes(ordersController, verifyToken));
 
   return router;
 }
