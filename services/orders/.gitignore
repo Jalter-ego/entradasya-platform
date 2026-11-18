@@ -8,3 +8,6 @@ coverage/
 .local/
 keys/
 *.tmp
+
+# Colección de Postman personal (no compartida)
+postman/

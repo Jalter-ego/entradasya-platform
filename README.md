@@ -12,6 +12,7 @@ Proyecto del módulo 3: plataforma de eventos, compra de entradas y control de i
 
 - [Web](apps/web/README.md).
 - [Events — P2](services/events/README.md).
+- [Orders — P3](services/orders/README.md).
 - [Tickets — P5](services/tickets/README.md).
 
 El esquema documenta también los servicios pendientes. No implica que sus bases, migraciones o endpoints ya estén implementados. Cada responsable mantiene el arranque y las migraciones de su servicio.
