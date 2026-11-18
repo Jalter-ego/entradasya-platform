@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - checkin (P6)
+  version: 0.1.0
+  description: |
+    Control de ingreso en portería: valida entradas contra tickets, registra un único
+    ingreso por ticketId en checkin_db y expone el conteo por evento.
+
+    Convenciones compatibles con events (P2) y tickets (P5):
+    - Nginx conserva el prefijo /api y bloquea /internal/*.
+    - JWT RS256, iss=entradasya-auth, aud=entradasya, sub UUID y role=doorman (o organizer en conteo).
+    - Errores normalizados: { error: { code, message, details? }, requestId }.
+servers:
+  - url: http://localhost:8080
+    description: APIs públicas mediante Nginx
+  - url: http://127.0.0.1:3007
+    description: Servicio directo en loopback
+tags:
+  - name: porteria
+  - name: salud
+paths:
+  /health:
+    get:
+      tags: [salud]
+      summary: Comprueba conexión a checkin_db y tabla checkins
+      responses:
+        '200':
+          description: Servicio operativo
+          content:
+            application/json:
+              example: { status: ok, service: checkin }
+        '503':
+          description: Base no disponible o migraciones pendientes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/checkin:
+    post:
+      tags: [porteria]
+      summary: Validar entrada y registrar ingreso único en portería
+      security: [{ bearer: [] }]
+      description: |
+        Solo el rol doorman puede invocarlo.
+        1. Consulta POST /internal/tickets/validate en tickets (P5).
+        2. Rechaza INVALID_TICKET (404) o WRONG_EVENT (409) sin insertar.
+        3. Inserta en checkins con restricción UNIQUE(ticket_id).
+        4. Si ya existía, responde 409 ALREADY_USED con la hora del primer ingreso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code, eventId]
+              properties:
+                code: { type: string, minLength: 1, maxLength: 128 }
+                eventId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Ingreso autorizado y registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [checkin, eventCount]
+                properties:
+                  checkin: { $ref: '#/components/schemas/Checkin' }
+                  eventCount: { type: integer, minimum: 1 }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404':
+          description: INVALID_TICKET
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: WRONG_EVENT o ALREADY_USED (incluye details.checkedInAt)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: TICKETS_UNAVAILABLE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/checkin/events/{eventId}/count:
+    get:
+      tags: [porteria]
+      summary: Cantidad total de ingresos autorizados para un evento
+      security: [{ bearer: [] }]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Conteo calculado con COUNT(*) sobre checkins
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eventId, count]
+                properties:
+                  eventId: { type: string, format: uuid }
+                  count: { type: integer, minimum: 0 }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/checkin/events/{eventId}/recent:
+    get:
+      tags: [porteria]
+      summary: Últimos ingresos registrados en el evento
+      security: [{ bearer: [] }]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Lista ordenada del más reciente al más antiguo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eventId, items]
+                properties:
+                  eventId: { type: string, format: uuid }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Checkin' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    Error:
+      description: Error normalizado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Checkin:
+      type: object
+      required: [id, ticketId, eventId, doormanId, checkedInAt]
+      properties:
+        id: { type: string, format: uuid }
+        ticketId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        doormanId: { type: string, format: uuid }
+        checkedInAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+        requestId: { type: string }

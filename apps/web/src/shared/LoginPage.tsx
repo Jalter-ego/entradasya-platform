@@ -35,7 +35,9 @@ export function LoginPage() {
   function destination(role: string) {
     const next = params.get('next');
     if (next && next.startsWith('/') && !next.startsWith('//')) return next;
-    return role === 'organizer' ? '/organizador/eventos' : '/';
+    if (role === 'organizer') return '/organizador/eventos';
+    if (role === 'doorman') return '/porteria';
+    return '/';
   }
 
   async function submit(e: FormEvent) {
