@@ -1,4 +1,9 @@
-import { ERROR_CODES } from '../constants/constants.js';
+import type { ReservationResponse } from '../clients/eventsClient.js';
+import type { TicketIssuePayload } from '../clients/ticketsClient.js';
+import {
+  ERROR_CODES, type ErrorStep, type NotificationStatus, type OrderStatus, type PaymentStatus,
+  type ReservationStatus, type TicketStatus,
+} from '../constants/constants.js';
 import { transaction, type Db, type Tx } from '../database/database.js';
 import type { OrderRow, OrderSelection } from '../types/order.js';
 import { AppError } from '../utils/appError.js';
@@ -24,11 +29,6 @@ export interface CreateOrderInput {
 export class OrdersRepository {
   constructor(private readonly db: Db) {}
 
-  /**
-   * Crea la orden y su línea en una sola transacción, o devuelve la existente para la misma
-   * (customer_id, idempotency_key). Un hash distinto es 409 IDEMPOTENCY_CONFLICT.
-   * Dos peticiones simultáneas con la misma clave: ON CONFLICT espera a la otra y solo una crea.
-   */
   async createOrGet(input: CreateOrderInput): Promise<{ created: boolean; order: OrderRow }> {
     const created = await transaction(this.db, async (tx) => {
       const inserted = await tx.query(
@@ -62,7 +62,6 @@ export class OrdersRepository {
     return rows[0] ?? null;
   }
 
-  /** Una orden de otro comprador se trata como inexistente. */
   async findOwned(id: string, customerId: string): Promise<OrderRow | null> {
     const { rows } = await this.db.query<OrderRow>(
       `SELECT ${ORDER_COLUMNS} ${FROM_ORDERS} WHERE o.id = $1 AND o.customer_id = $2`, [id, customerId],
@@ -78,7 +77,6 @@ export class OrdersRepository {
     return rows[0] ?? null;
   }
 
-  /** Mis compras, de la más reciente a la más antigua (usa el índice customer_id, created_at DESC). */
   async listByCustomer(customerId: string, page: number, perPage: number): Promise<{ rows: OrderRow[]; total: number }> {
     const [list, count] = await Promise.all([
       this.db.query<OrderRow>(
@@ -93,9 +91,74 @@ export class OrdersRepository {
     return { rows: list.rows, total: count.rows[0]?.total ?? 0 };
   }
 
-  private async mustFind(id: string): Promise<OrderRow> {
+  async mustFind(id: string): Promise<OrderRow> {
     const order = await this.findById(id);
-    if (!order) throw new Error('La orden recién creada no se encontró');
+    if (!order) throw new Error('La orden no se encontró');
     return order;
   }
+
+  async update(id: string, patch: OrderPatch, clearErrorFor?: ErrorStep): Promise<OrderRow> {
+    const sets: string[] = ['updated_at = now()'];
+    const values: unknown[] = [id];
+    for (const [column, value] of Object.entries(patch)) {
+      if (!PATCHABLE_COLUMNS.has(column)) throw new Error(`Columna no actualizable: ${column}`);
+      values.push(value);
+      sets.push(`${column} = $${values.length}`);
+    }
+    if (clearErrorFor) {
+      values.push(clearErrorFor);
+      const step = `$${values.length}`;
+      sets.push(`last_error_step = CASE WHEN last_error_step = ${step} THEN NULL ELSE last_error_step END`);
+      sets.push(`last_error_code = CASE WHEN last_error_step = ${step} THEN NULL ELSE last_error_code END`);
+    }
+    await this.db.query(`UPDATE orders SET ${sets.join(', ')} WHERE id = $1`, values);
+    return this.mustFind(id);
+  }
+
+  async confirmReservation(id: string, reservation: ReservationResponse): Promise<OrderRow> {
+    await transaction(this.db, async (tx) => {
+      await tx.query(
+        `UPDATE order_items
+         SET organizer_id = $2, unit_price_minor = $3, currency = $4, reservation_snapshot = $5
+         WHERE order_id = $1 AND reservation_snapshot IS NULL`,
+        [id, reservation.event.organizerId, reservation.reservation.unitPriceMinor,
+          reservation.reservation.currency, JSON.stringify(reservation)],
+      );
+      await tx.query(
+        `UPDATE orders SET reservation_status = 'active', updated_at = now(),
+           last_error_code = CASE WHEN last_error_step = 'reservation' THEN NULL ELSE last_error_code END,
+           last_error_step = CASE WHEN last_error_step = 'reservation' THEN NULL ELSE last_error_step END
+         WHERE id = $1`,
+        [id],
+      );
+    });
+    return this.mustFind(id);
+  }
+
+  async saveTicketPayload(id: string, payload: TicketIssuePayload): Promise<OrderRow> {
+    await this.db.query(
+      `UPDATE orders
+       SET ticket_issue_payload = COALESCE(ticket_issue_payload, $2), ticket_status = 'pending', updated_at = now()
+       WHERE id = $1`,
+      [id, JSON.stringify(payload)],
+    );
+    return this.mustFind(id);
+  }
 }
+
+export type OrderPatch = Partial<{
+  status: OrderStatus;
+  reservation_status: ReservationStatus;
+  payment_status: PaymentStatus;
+  ticket_status: TicketStatus;
+  notification_status: NotificationStatus;
+  payment_transaction_id: string;
+  paid_at: Date;
+  last_error_step: ErrorStep;
+  last_error_code: string;
+}>;
+
+const PATCHABLE_COLUMNS = new Set([
+  'status', 'reservation_status', 'payment_status', 'ticket_status', 'notification_status',
+  'payment_transaction_id', 'paid_at', 'last_error_step', 'last_error_code',
+]);
