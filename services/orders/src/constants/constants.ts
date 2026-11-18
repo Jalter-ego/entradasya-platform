@@ -11,6 +11,16 @@ export const DB_POOL = {
 
 export const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+export const JWT_ALGORITHM = 'RS256';
+
+export const ROLES = {
+  CUSTOMER: 'customer',
+  ORGANIZER: 'organizer',
+  DOORMAN: 'doorman',
+} as const;
+
+export type Role = (typeof ROLES)[keyof typeof ROLES];
+
 export const PAGINATION = {
   defaultPerPage: 10,
   maxPerPage: 100,

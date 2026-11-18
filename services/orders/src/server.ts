@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { config, validateConfig } from './config/config.js';
 import { SHUTDOWN_TIMEOUT_MS } from './constants/constants.js';
 import { checkSchema, createPool } from './database/database.js';
+import { createJwtVerifier } from './utils/jwt.js';
 import { log } from './utils/logger.js';
 
 async function start() {
@@ -9,8 +10,9 @@ async function start() {
   const db = createPool();
   db.on('error', () => log('error', 'database_pool_error'));
   try {
+    const verifyToken = await createJwtVerifier();
     await checkSchema(db);
-    const app = createApp({ db });
+    const app = createApp({ db, verifyToken });
     const server = app.listen(config.port, config.host, () => log('info', 'listening', {
       host: config.host, port: config.port,
     }));
@@ -35,7 +37,7 @@ async function start() {
 }
 
 start().catch((error) => {
-  log('error', 'No se pudo iniciar orders. Revisa .env, la conexión a orders_db y ejecuta pnpm migrate.', {
+  log('error', 'No se pudo iniciar orders. Revisa .env, la clave pública de auth, la conexión a orders_db y ejecuta pnpm migrate.', {
     reason: error instanceof Error && error.message.includes('.env.example') ? error.message : undefined,
   });
   process.exitCode = 1;

@@ -5,9 +5,11 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { requestContext } from './middleware/requestContext.js';
 import { createRoutes } from './routes/routes.js';
+import type { VerifyToken } from './types/auth.js';
 
 export interface AppDeps {
   db: Db;
+  verifyToken: VerifyToken;
 }
 
 export function createApp(deps: AppDeps) {
