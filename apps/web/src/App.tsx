@@ -1,34 +1,17 @@
-import { BrowserRouter, Link, Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { OrganizerLayout } from './features/events/components/OrganizerLayout';
 import { CatalogPage } from './features/events/pages/CatalogPage';
 import { EventDetailPage } from './features/events/pages/EventDetailPage';
 import { EventFormPage } from './features/events/pages/EventFormPage';
 import { OrganizerEventsPage } from './features/events/pages/OrganizerEventsPage';
+import { CheckoutPage } from './features/orders/pages/CheckoutPage';
+import { MyOrdersPage } from './features/orders/pages/MyOrdersPage';
+import { OrderResultPage } from './features/orders/pages/OrderResultPage';
 import { MyTicketsPage } from './features/tickets/pages/MyTicketsPage';
 import { Layout } from './shared/Layout';
 import { LoginPage } from './shared/LoginPage';
 import { RequireRole } from './shared/RequireRole';
 import { SessionProvider } from './shared/session';
-
-/**
- * Lugar provisorio del checkout: lo reemplaza P3 (features/orders).
- * Recibe ?eventId&sectorId&quantity desde el detalle del evento.
- */
-function CheckoutPlaceholder() {
-  const [params] = useSearchParams();
-  return (
-    <section className="page page--narrow notice">
-      <h1>Checkout en construcción</h1>
-      <p>
-        Aquí continúa la compra (P3). Selección recibida: {params.get('quantity')} entrada(s) del sector{' '}
-        <code>{params.get('sectorId')}</code>.
-      </p>
-      <Link className="btn btn--secondary" to={`/eventos/${params.get('eventId') ?? ''}`}>
-        Volver al evento
-      </Link>
-    </section>
-  );
-}
 
 function NotFound() {
   return (
@@ -51,7 +34,9 @@ export function App() {
           <Route element={<Layout />}>
             <Route index element={<CatalogPage />} />
             <Route path="eventos/:id" element={<EventDetailPage />} />
-            <Route path="checkout" element={<CheckoutPlaceholder />} />
+            <Route path="checkout" element={<RequireRole role="customer"><CheckoutPage /></RequireRole>} />
+            <Route path="compras/:id" element={<RequireRole role="customer"><OrderResultPage /></RequireRole>} />
+            <Route path="mis-compras" element={<RequireRole role="customer"><MyOrdersPage /></RequireRole>} />
             <Route path="mis-entradas" element={<RequireRole role="customer"><MyTicketsPage /></RequireRole>} />
             <Route path="*" element={<NotFound />} />
           </Route>

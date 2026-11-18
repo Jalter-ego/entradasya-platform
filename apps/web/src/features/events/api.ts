@@ -44,8 +44,8 @@ export interface EventInput {
 }
 
 /**
- * Reporte de ventas que expone orders (P3): GET /api/orders/reports/events/:eventId.
- * Forma PROPUESTA; confirmar con P3 y ajustar aquí si cambia.
+ * Reporte de ventas para el SalesPanel. Se obtiene de orders (P3):
+ * GET /api/orders/reports/events/:eventId (contracts/orders.openapi.yaml) y se adapta en `salesReport`.
  */
 export interface SalesReport {
   eventId: string;
@@ -54,6 +54,18 @@ export interface SalesReport {
   ticketsSold: number;
   revenueMinor: number;
   bySector?: { sectorId: string; sectorName?: string; ticketsSold: number; revenueMinor: number }[];
+}
+
+/** Respuesta de orders: envoltorio { success, message, data, meta, requestId }; solo cuenta órdenes pagadas. */
+interface OrdersSalesReport {
+  data: {
+    eventId: string;
+    currency: string | null;
+    ordersPaid: number;
+    ticketsSold: number;
+    revenueMinor: number;
+    sectors: { sectorId: string; sectorName: string; ordersPaid: number; ticketsSold: number; revenueMinor: number }[];
+  };
 }
 
 const base = '/api/events';
@@ -91,8 +103,18 @@ export const eventsApi = {
     api<EventItem>(`${base}/${id}/sectors/${sectorId}`, { method: 'PATCH', token, body }),
   deleteSector: (token: Token, id: string, sectorId: string) =>
     api<EventItem>(`${base}/${id}/sectors/${sectorId}`, { method: 'DELETE', token }),
-  salesReport: (token: Token, id: string, signal?: AbortSignal) =>
-    api<SalesReport>(`/api/orders/reports/events/${id}`, { token, signal }),
+  /** `currency` es null en un evento sin ventas; se usa la del evento para mostrar los ceros. */
+  salesReport: (token: Token, id: string, currency: string, signal?: AbortSignal) =>
+    api<OrdersSalesReport>(`/api/orders/reports/events/${id}`, { token, signal }).then(({ data }): SalesReport => ({
+      eventId: data.eventId,
+      currency: data.currency ?? currency,
+      paidOrders: data.ordersPaid,
+      ticketsSold: data.ticketsSold,
+      revenueMinor: data.revenueMinor,
+      bySector: data.sectors.map((s) => ({
+        sectorId: s.sectorId, sectorName: s.sectorName, ticketsSold: s.ticketsSold, revenueMinor: s.revenueMinor,
+      })),
+    })),
 };
 
 // ------------------------------------------------------------- derivados para la UI

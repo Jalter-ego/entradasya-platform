@@ -154,7 +154,7 @@ Al reservar, events bloquea el evento (`FOR SHARE`) y luego el sector (`FOR NO K
 
 ## 5. P3 — `orders_db`
 
-**Estado:** diseño por implementar. Una orden compra de 1 a 6 entradas de **un solo sector de un evento**; por eso hay como máximo un registro `order_items` por orden en v1.
+**Estado:** implementado en la [migración de orders](../../services/orders/migrations/1763700000000_init-orders.sql), con las tablas, restricciones, estados e índices de esta sección. El flujo y su recuperación se describen en el [README de orders](../../services/orders/README.md). Las integraciones con payments y notifications siguen un contrato provisional hasta que P4 publique el suyo. Una orden compra de 1 a 6 entradas de **un solo sector de un evento**; por eso hay como máximo un registro `order_items` por orden en v1.
 
 ### Tabla `orders`
 
@@ -343,7 +343,7 @@ P3 construye explícitamente este cuerpo: copia `orderId`, `quantity`, `unitPric
 
 **`city` permanece en el snapshot de la reserva y en orders, pero no se envía a tickets en el contrato actual.** Su esquema rechaza campos adicionales. Si se necesita ciudad en el PDF, P3 y P5 actualizan juntos este README, el OpenAPI, la validación y el renderizado antes de comenzar a enviarla.
 
-El formato exacto de cada petición/respuesta y sus errores se mantiene en OpenAPI. Este README fija el modelo de datos y los nombres comunes; los archivos [`events.openapi.yaml`](../../contracts/events.openapi.yaml) y [`tickets.openapi.yaml`](../../contracts/tickets.openapi.yaml) describen los endpoints actuales. P1, P3, P4 y P6 deben agregar los de sus servicios.
+El formato exacto de cada petición/respuesta y sus errores se mantiene en OpenAPI. Este README fija el modelo de datos y los nombres comunes; los archivos [`events.openapi.yaml`](../../contracts/events.openapi.yaml), [`orders.openapi.yaml`](../../contracts/orders.openapi.yaml) y [`tickets.openapi.yaml`](../../contracts/tickets.openapi.yaml) describen los endpoints actuales. P1, P4 y P6 deben agregar los de sus servicios.
 
 ## 10. Implementación y control de cambios
 

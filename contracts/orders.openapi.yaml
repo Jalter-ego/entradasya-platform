@@ -1,0 +1,422 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - orders (P3)
+  version: 0.1.0
+  description: |
+    Órdenes de compra, coordinación del flujo events -> payments -> tickets -> notifications,
+    consultas del comprador y reporte de ventas del organizador. Dueño: P3.
+
+    - Rutas públicas bajo `/api/orders` (Nginx conserva el prefijo `/api`). orders no expone `/internal`.
+    - JWT RS256 de auth: `iss=entradasya-auth`, `aud=entradasya`, `sub` UUID, `role`, `email`, `exp`.
+      El comprador y su correo salen SIEMPRE del token, nunca del cuerpo.
+    - Importes en unidades menores enteras (`unitPriceMinor: 5000` = 50,00 BOB). Fechas ISO 8601 en UTC.
+    - Estados de orden: `pending`, `paid`, `rejected`, `cancelled`. La web muestra su equivalente en español.
+
+    **Formato de respuesta.** Todas las respuestas usan el mismo envoltorio:
+
+    - Éxito: `{ success: true, message, data, meta, requestId }`. `meta` solo en listados paginados.
+    - Error: `{ success: false, message, data: null, error: { code, message, details? }, meta: null, requestId }`.
+      Es compatible con la convención común del plan `{ error: { code, message }, requestId }`:
+      un consumidor que lea `error.code` y `requestId` funciona igual.
+
+    **Resultados de negocio.** Una compra agotada o con pago rechazado NO es un error HTTP: la orden se crea
+    y queda `rejected`; el motivo viaja en `data.lastError.code` (`SOLD_OUT`, `PAYMENT_REJECTED`, ...).
+    Una compra con un paso incierto (timeout) queda `pending` y se recupera con el reintento.
+servers:
+  - url: http://localhost:8080
+    description: A través de Nginx
+  - url: http://127.0.0.1:3003
+    description: Directo al servicio (desarrollo)
+
+tags:
+  - name: cliente
+  - name: organizador
+
+paths:
+  /health:
+    get:
+      summary: Salud del servicio (comprueba sus tablas en orders_db)
+      responses:
+        '200':
+          description: Disponible
+          content:
+            application/json:
+              example:
+                success: true
+                message: Servicio disponible
+                data: { status: ok, service: orders }
+                meta: null
+                requestId: 0080544d-ded2-4720-9af0-e855838d8c9e
+        '503': { $ref: '#/components/responses/Error' }
+
+  /api/orders:
+    post:
+      tags: [cliente]
+      summary: Comprar de 1 a 6 entradas de un sector de un evento
+      description: |
+        Crea la orden y ejecuta el flujo completo dentro de la petición, con timeout acotado por paso:
+        reserva en events -> pago en payments -> emisión en tickets -> confirmación en notifications.
+
+        **Idempotencia.** La web genera una `Idempotency-Key` por compra y la reutiliza en cada reintento
+        de esa misma compra (doble clic, timeout de red). Con la misma clave y el mismo cuerpo:
+        no se crea otra orden, no se cobra otra vez ni se emiten entradas duplicadas; si quedaban pasos
+        pendientes se reanudan y se devuelve la orden con `200`. La misma clave con otro cuerpo
+        produce `409 IDEMPOTENCY_CONFLICT`. Una compra nueva usa una clave nueva.
+
+        **Precio.** El navegador no envía precio ni total: se toman de la reserva confirmada por events.
+
+        **Resultado** (`data.status`):
+        - `paid`: pago aprobado. Si la emisión o el correo fallaron, la compra sigue pagada
+          (`progress.tickets = pending` o `progress.notification = failed`) y se completa con el reintento.
+        - `rejected`: `lastError.code` = `SOLD_OUT`, `EVENT_NOT_AVAILABLE`, `EVENT_NOT_FOUND` o `PAYMENT_REJECTED`.
+          Con pago rechazado los cupos se liberan.
+        - `pending`: un paso quedó incierto (timeout o servicio caído). Consultar `GET /api/orders/{id}`
+          o llamar a `POST /api/orders/{id}/retry`.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderCreate' }
+            example:
+              eventId: 20000000-0000-4000-8000-000000000001
+              sectorId: 30000000-0000-4000-8000-000000000001
+              quantity: 2
+              payment: { method: demo_card, last4: '1111' }
+      responses:
+        '201':
+          description: Orden creada en esta petición (pagada, rechazada o pendiente)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+              examples:
+                pagada:
+                  value:
+                    success: true
+                    message: Compra realizada
+                    data: &paidOrder
+                      id: 40000000-0000-4000-8000-000000000001
+                      status: paid
+                      eventId: 20000000-0000-4000-8000-000000000001
+                      sectorId: 30000000-0000-4000-8000-000000000001
+                      quantity: 2
+                      unitPriceMinor: 5000
+                      totalMinor: 10000
+                      currency: BOB
+                      event:
+                        id: 20000000-0000-4000-8000-000000000001
+                        title: Noche de Rock
+                        venue: Estadio Central
+                        city: La Paz
+                        startsAt: '2026-12-20T23:00:00.000Z'
+                      sector: { id: 30000000-0000-4000-8000-000000000001, name: General }
+                      payment: { method: demo_card, last4: '1111', transactionId: 60000000-0000-4000-8000-000000000001 }
+                      progress: { reservation: active, payment: approved, tickets: issued, notification: sent }
+                      lastError: null
+                      paidAt: '2026-11-17T21:00:02.000Z'
+                      createdAt: '2026-11-17T21:00:00.000Z'
+                      updatedAt: '2026-11-17T21:00:03.000Z'
+                    meta: null
+                    requestId: 5b8e0f0e-7a43-4bb0-9a65-0f1f8f2a1d10
+        '200':
+          description: Misma clave y mismo cuerpo; devuelve la orden existente (reanudando pasos pendientes)
+          content: { application/json: { schema: { $ref: '#/components/schemas/OrderResponse' } } }
+        '400':
+          description: VALIDATION_ERROR (cuerpo o falta Idempotency-Key), INVALID_JSON
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                success: false
+                message: Los datos enviados no son válidos
+                data: null
+                error:
+                  code: VALIDATION_ERROR
+                  message: Los datos enviados no son válidos
+                  details: [{ field: quantity, message: Number must be less than or equal to 6 }]
+                meta: null
+                requestId: 3e1b2c4d-0000-4000-8000-000000000000
+        '401': { $ref: '#/components/responses/Error' }
+        '403':
+          description: El token no es de un cliente
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+        '409':
+          description: IDEMPOTENCY_CONFLICT (la misma clave ya se usó con otros datos)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              example:
+                success: false
+                message: Esa clave de compra ya se usó con otros datos
+                data: null
+                error: { code: IDEMPOTENCY_CONFLICT, message: Esa clave de compra ya se usó con otros datos }
+                meta: null
+                requestId: 7c0d8a8e-0000-4000-8000-000000000000
+
+  /api/orders/me:
+    get:
+      tags: [cliente]
+      summary: Mis compras, de la más reciente a la más antigua
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+      responses:
+        '200':
+          description: Página de órdenes del comprador del token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderListResponse' }
+              example:
+                success: true
+                message: Compras obtenidas correctamente
+                data: [*paidOrder]
+                meta: { currentPage: 1, perPage: 10, total: 1, lastPage: 1 }
+                requestId: 9a7f2b3c-0000-4000-8000-000000000000
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/orders/{id}:
+    parameters: [{ $ref: '#/components/parameters/OrderId' }]
+    get:
+      tags: [cliente]
+      summary: Detalle de una compra propia
+      description: Una orden de otro comprador responde 404, igual que una inexistente.
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Orden
+          content: { application/json: { schema: { $ref: '#/components/schemas/OrderResponse' } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/orders/{id}/retry:
+    parameters: [{ $ref: '#/components/parameters/OrderId' }]
+    post:
+      tags: [cliente]
+      summary: Reanudar los pasos pendientes de una compra propia
+      description: |
+        Repite de forma idempotente solo lo que falta, con los mismos datos persistidos:
+        confirmar una reserva o un pago inciertos, liberar cupos pendientes, emitir entradas
+        (mismo cuerpo de emisión) y reenviar el correo fallido. Nunca crea otra orden ni cobra dos veces.
+        Si no queda nada pendiente devuelve la orden sin cambios. Dos reintentos simultáneos
+        se serializan en PostgreSQL. Reenviar un correo cuyo resultado era incierto puede duplicarlo.
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Orden después del reintento
+          content: { application/json: { schema: { $ref: '#/components/schemas/OrderResponse' } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/orders/reports/events/{eventId}:
+    parameters:
+      - { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [organizador]
+      summary: Ventas e ingresos de un evento propio
+      description: |
+        Solo cuenta órdenes `paid`. El organizador se compara con la copia de la reserva guardada en
+        cada orden (`organizerId`); si el evento tiene ventas de otro organizador responde 403.
+        Un evento sin ventas devuelve totales en cero y `currency: null`.
+        La web de P2 consume este reporte; no lee orders_db.
+      security: [{ bearer: [] }]
+      responses:
+        '200':
+          description: Reporte
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SalesReportResponse' }
+              example:
+                success: true
+                message: Reporte de ventas obtenido correctamente
+                data:
+                  eventId: 20000000-0000-4000-8000-000000000001
+                  currency: BOB
+                  ordersPaid: 3
+                  ticketsSold: 5
+                  revenueMinor: 25000
+                  sectors:
+                    - { sectorId: 30000000-0000-4000-8000-000000000001, sectorName: General, ordersPaid: 3, ticketsSold: 5, revenueMinor: 25000 }
+                meta: null
+                requestId: 1d2e3f40-0000-4000-8000-000000000000
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403':
+          description: El token no es de un organizador o el evento es de otro organizador
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    OrderId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Clave estable de la compra; se recomienda `crypto.randomUUID()` en la web.
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
+
+  responses:
+    Error:
+      description: Error (UNAUTHORIZED, FORBIDDEN, NOT_FOUND, VALIDATION_ERROR, SERVICE_UNAVAILABLE, ...)
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+
+  schemas:
+    Envelope:
+      type: object
+      required: [success, message, data, meta, requestId]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        meta: { allOf: [{ $ref: '#/components/schemas/PaginationMeta' }], nullable: true }
+        requestId: { type: string }
+
+    PaginationMeta:
+      type: object
+      properties:
+        currentPage: { type: integer, example: 1 }
+        perPage: { type: integer, example: 10 }
+        total: { type: integer, example: 100 }
+        lastPage: { type: integer, example: 10 }
+
+    ErrorResponse:
+      type: object
+      required: [success, message, data, error, meta, requestId]
+      properties:
+        success: { type: boolean, enum: [false] }
+        message: { type: string }
+        data: { type: object, nullable: true, enum: [null] }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details:
+              type: array
+              description: Solo en errores de validación
+              items:
+                type: object
+                properties:
+                  field: { type: string, example: quantity }
+                  message: { type: string }
+        meta: { type: object, nullable: true, enum: [null] }
+        requestId: { type: string }
+
+    OrderCreate:
+      type: object
+      additionalProperties: false
+      required: [eventId, sectorId, quantity, payment]
+      properties:
+        eventId: { type: string, format: uuid }
+        sectorId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 6 }
+        payment: { $ref: '#/components/schemas/DemoPayment' }
+
+    DemoPayment:
+      type: object
+      additionalProperties: false
+      required: [method, last4]
+      description: Pago ficticio de demo. `1111` aprueba y `0000` rechaza; otro valor es 400.
+      properties:
+        method: { type: string, enum: [demo_card] }
+        last4: { type: string, enum: ['0000', '1111'] }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, paid, rejected, cancelled] }
+        eventId: { type: string, format: uuid }
+        sectorId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 6 }
+        unitPriceMinor: { type: integer, nullable: true, description: null hasta confirmar la reserva }
+        totalMinor: { type: integer, nullable: true, description: unitPriceMinor * quantity }
+        currency: { type: string, nullable: true, example: BOB }
+        event:
+          type: object
+          nullable: true
+          description: Copia tomada al reservar; no cambia si luego se edita el evento
+          properties:
+            id: { type: string, format: uuid }
+            title: { type: string }
+            venue: { type: string }
+            city: { type: string }
+            startsAt: { type: string, format: date-time }
+        sector:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        payment:
+          type: object
+          properties:
+            method: { type: string, enum: [demo_card] }
+            last4: { type: string }
+            transactionId: { type: string, format: uuid, nullable: true }
+        progress:
+          type: object
+          description: Avance persistido de cada paso
+          properties:
+            reservation: { type: string, enum: [not_started, pending, active, release_pending, released, failed] }
+            payment: { type: string, enum: [not_started, pending, unknown, approved, rejected] }
+            tickets: { type: string, enum: [not_started, pending, issued] }
+            notification: { type: string, enum: [not_started, pending, sent, failed, unknown] }
+        lastError:
+          type: object
+          nullable: true
+          properties:
+            step: { type: string, enum: [reservation, payment, tickets, notification] }
+            code: { type: string, example: PAYMENT_REJECTED }
+        paidAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    OrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Order' }
+
+    OrderListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Order' } }
+
+    SalesReport:
+      type: object
+      properties:
+        eventId: { type: string, format: uuid }
+        currency: { type: string, nullable: true }
+        ordersPaid: { type: integer }
+        ticketsSold: { type: integer }
+        revenueMinor: { type: integer }
+        sectors:
+          type: array
+          items:
+            type: object
+            properties:
+              sectorId: { type: string, format: uuid }
+              sectorName: { type: string }
+              ordersPaid: { type: integer }
+              ticketsSold: { type: integer }
+              revenueMinor: { type: integer }
+
+    SalesReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/SalesReport' }

@@ -14,10 +14,12 @@ interface RequestOptions {
   body?: unknown;
   token?: string | null;
   signal?: AbortSignal;
+  /** Cabeceras adicionales, por ejemplo Idempotency-Key en la compra. */
+  headers?: Record<string, string>;
 }
 
 /** Llama a una API pública a través del gateway (/api/...). */
-export async function api<T>(path: string, { method = 'GET', body, token, signal }: RequestOptions = {}): Promise<T> {
+export async function api<T>(path: string, { method = 'GET', body, token, signal, headers }: RequestOptions = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -27,6 +29,7 @@ export async function api<T>(path: string, { method = 'GET', body, token, signal
         Accept: 'application/json',
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });

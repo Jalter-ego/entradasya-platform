@@ -8,7 +8,7 @@ import { eventsApi, totals, type EventItem } from '../api';
  * Mientras orders no exista, muestra los cupos reservados que conoce events.
  */
 export function SalesPanel({ event, token }: { event: EventItem; token: string | null }) {
-  const report = useAsync((signal) => eventsApi.salesReport(token, event.id, signal), [event.id, token]);
+  const report = useAsync((signal) => eventsApi.salesReport(token, event.id, event.currency, signal), [event.id, token]);
   const { capacity, committed } = totals(event);
 
   const unavailable =
