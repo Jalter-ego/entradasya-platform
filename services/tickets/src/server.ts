@@ -7,7 +7,12 @@ import { FileTicketPdf } from './tickets/pdf.js';
 
 async function start() {
   const config = loadConfig();
-  const db = createPool(config.databaseUrl, config.databaseSsl);
+  const db = createPool(
+    config.databaseUrl,
+    config.databaseSsl,
+    config.dbSchema,
+    config.databaseSslRejectUnauthorized,
+  );
   db.on('error', () => log('error', 'database_pool_error'));
   const pdf = new FileTicketPdf(config.storageDir, config.timeZone);
   try {

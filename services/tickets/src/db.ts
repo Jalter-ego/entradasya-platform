@@ -3,15 +3,21 @@ import pg from 'pg';
 export type Db = pg.Pool;
 export type Tx = pg.PoolClient;
 
-export function createPool(connectionString: string, ssl = false): Db {
+export function createPool(
+  connectionString: string,
+  ssl = false,
+  schema = 'public',
+  sslRejectUnauthorized = true,
+): Db {
   const pool = new pg.Pool({
     connectionString,
-    ssl: ssl ? { rejectUnauthorized: true } : undefined,
+    ssl: ssl ? { rejectUnauthorized: sslRejectUnauthorized } : undefined,
     max: 10,
     connectionTimeoutMillis: 5_000,
     query_timeout: 10_000,
     statement_timeout: 10_000,
     idle_in_transaction_session_timeout: 15_000,
+    options: schema !== 'public' ? `-c search_path=${schema}` : undefined,
   });
   return pool;
 }

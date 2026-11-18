@@ -25,6 +25,7 @@ src/
 │   └── ...
 ├── styles/global.css    # colores, tipografía y componentes base
 └── features/
+    ├── checkin/         # P6: portería, lectura QR, resultado y conteo
     ├── events/          # P2: cartelera, detalle, organizador
     ├── orders/          # P3: checkout, resultado y Mis compras
     ├── payments/        # P4: PaymentFields (pago de demo dentro del checkout)
@@ -152,3 +153,11 @@ npm test
 ```
 
 Las pruebas de tickets usan el ejecutor de Node y el compilador TypeScript ya instalado, sin nuevas dependencias. Simulan `fetch` y verifican Bearer, filtro/paginación, respuesta binaria, errores 401/403/404/503, errores del proxy, archivo vacío, HTML inesperado, caída de red y cancelación. No reemplazan la comprobación manual con el backend y PostgreSQL.
+
+## Feature checkin (P6)
+
+| Ruta | Pantalla |
+|---|---|
+| `/porteria` | Portería (`role=doorman`): selector de evento publicado, entrada manual o lector QR (teclado / cámara opcional), resultado claro (`APROBADO`, `ALREADY_USED` con hora del primer ingreso, `WRONG_EVENT`, `INVALID_TICKET`) y conteo en vivo. |
+
+El enlace aparece en el encabezado para `role=doorman` y el inicio de sesión redirige automáticamente a `/porteria` con esa cuenta (`portero@demo.bo` / `demo1234`).

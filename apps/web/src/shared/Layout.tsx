@@ -28,6 +28,7 @@ export function Layout() {
             {user?.role === 'organizer' && <NavLink to="/organizador/eventos">Mis eventos</NavLink>}
             {user?.role === 'customer' && <NavLink to="/mis-compras">Mis compras</NavLink>}
             {user?.role === 'customer' && <NavLink to="/mis-entradas">Mis entradas</NavLink>}
+            {user?.role === 'doorman' && <NavLink to="/porteria">Portería</NavLink>}
           </nav>
           <div className="site-header__session">
             {user ? (

@@ -1,5 +1,6 @@
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { OrganizerLayout } from './features/events/components/OrganizerLayout';
+import { CheckinPage } from './features/checkin/pages/CheckinPage';
 import { CatalogPage } from './features/events/pages/CatalogPage';
 import { EventDetailPage } from './features/events/pages/EventDetailPage';
 import { EventFormPage } from './features/events/pages/EventFormPage';
@@ -38,6 +39,7 @@ export function App() {
             <Route path="compras/:id" element={<RequireRole role="customer"><OrderResultPage /></RequireRole>} />
             <Route path="mis-compras" element={<RequireRole role="customer"><MyOrdersPage /></RequireRole>} />
             <Route path="mis-entradas" element={<RequireRole role="customer"><MyTicketsPage /></RequireRole>} />
+            <Route path="porteria" element={<RequireRole role="doorman"><CheckinPage /></RequireRole>} />
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Panel del organizador (P2): marco propio con barra lateral. */}
