@@ -1,0 +1,35 @@
+{
+  "name": "@entradasya/payments",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EntradasYa - servicio payments: pago simulado e idempotente por orden (P4)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "migrate:down": "node --env-file-if-exists=.env scripts/migrate.mjs down",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.0",
+    "@types/supertest": "^6.0.3",
+    "node-pg-migrate": "^7.9.1",
+    "supertest": "^7.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

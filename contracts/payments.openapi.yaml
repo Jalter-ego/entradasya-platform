@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - payments (interno)
+  version: 1.0.0
+  description: |
+    Pago simulado de una orden (P4). Servicio **interno**: solo lo llama orders,
+    con `X-Internal-Token`. Nginx no lo publica y escucha en loopback.
+
+    - Regla fija de demo: `last4=1111` aprueba, `last4=0000` rechaza. Otro valor → 400 sin crear pago.
+    - Solo se recibe `method=demo_card` y `last4`. Ningún dato de tarjeta real; campos extra → 400.
+    - Un rechazo **no es un error HTTP**: responde 2xx con `status=rejected` y `rejectionCode=PAYMENT_REJECTED`.
+    - Idempotente por `orderId`: repetir el mismo cuerpo devuelve la misma transacción (200),
+      también si fue rechazada. Cambiar importe, moneda o tarjeta → 409 `IDEMPOTENCY_CONFLICT`.
+    - Tras un timeout, orders consulta `GET /internal/payments/orders/{orderId}` o repite el POST.
+    - Importes en unidades menores enteras (`10000` = 100,00 BOB). orders calcula el total desde la reserva.
+    - Errores: `{ error: { code, message }, requestId }`.
+
+    Modelo de datos: docs/database/README.md §6.
+servers:
+  - url: http://127.0.0.1:3004
+    description: Servicio directo (solo red local); no pasa por Nginx
+tags:
+  - name: orders
+paths:
+  /health:
+    get:
+      summary: Comprueba la base y que la migración de payments esté aplicada
+      responses:
+        '200':
+          description: Disponible
+          content:
+            application/json:
+              example: { status: ok, service: payments }
+        '503':
+          description: Base inaccesible o migraciones pendientes
+          content:
+            application/json:
+              example:
+                status: unavailable
+                service: payments
+                error: { code: DB_UNAVAILABLE, message: La base no responde o faltan migraciones }
+                requestId: 3f1c...
+
+  /internal/payments:
+    post:
+      tags: [orders]
+      summary: Registrar el pago simulado de una orden (idempotente)
+      security: [{ ordersToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChargeInput' }
+            examples:
+              aprobado:
+                value:
+                  orderId: 40000000-0000-4000-8000-000000000001
+                  amountMinor: 10000
+                  currency: BOB
+                  method: demo_card
+                  last4: '1111'
+              rechazado:
+                value:
+                  orderId: 40000000-0000-4000-8000-000000000002
+                  amountMinor: 5000
+                  currency: BOB
+                  method: demo_card
+                  last4: '0000'
+      responses:
+        '201':
+          description: Resultado registrado por primera vez (aprobado o rechazado)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+              examples:
+                aprobado:
+                  value:
+                    transactionId: 50d9ca45-32e3-4a71-9cb4-bf28fa5cb7f4
+                    orderId: 40000000-0000-4000-8000-000000000001
+                    status: approved
+                    amountMinor: 10000
+                    currency: BOB
+                    method: demo_card
+                    last4: '1111'
+                    rejectionCode: null
+                    createdAt: '2026-11-18T17:07:04.279Z'
+                rechazado:
+                  value:
+                    transactionId: 0b6a3e8e-8a7c-4f6e-9a35-4f9d1d2f8c11
+                    orderId: 40000000-0000-4000-8000-000000000002
+                    status: rejected
+                    amountMinor: 5000
+                    currency: BOB
+                    method: demo_card
+                    last4: '0000'
+                    rejectionCode: PAYMENT_REJECTED
+                    createdAt: '2026-11-18T17:08:10.002Z'
+        '200':
+          description: Repetición del mismo cobro; mismo transactionId y resultado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '400':
+          description: Cuerpo inválido, terminación distinta de 0000/1111 o campos extra. No crea pago.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: VALIDATION_ERROR, message: 'last4: tarjeta de demo: usar 1111 (aprueba) o 0000 (rechaza)' }
+                requestId: 7b2e...
+        '401':
+          description: Falta X-Internal-Token o es incorrecto (un JWT de cliente no sirve)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: La orden ya tiene un pago con otro importe, moneda o tarjeta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: IDEMPOTENCY_CONFLICT, message: La orden ya tiene un pago con otro importe, moneda o medio de pago }
+                requestId: 9c0d...
+
+  /internal/payments/orders/{orderId}:
+    get:
+      tags: [orders]
+      summary: Consultar el pago de una orden (recuperación tras timeout)
+      security: [{ ordersToken: [] }]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Pago registrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '401':
+          description: Credencial interna inválida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: La orden nunca se cobró (o el id no es un UUID). Es seguro repetir el POST.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    ordersToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+      description: Token exclusivo del par orders → payments (INTERNAL_TOKEN_ORDERS / PAYMENTS_INTERNAL_TOKEN).
+  schemas:
+    ChargeInput:
+      type: object
+      additionalProperties: false
+      required: [orderId, amountMinor, currency, method, last4]
+      properties:
+        orderId: { type: string, format: uuid }
+        amountMinor:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Total en unidades menores, calculado por orders (precio de la reserva × cantidad)
+        currency: { type: string, pattern: '^[A-Z]{3}$', example: BOB }
+        method: { type: string, enum: [demo_card] }
+        last4: { type: string, enum: ['0000', '1111'] }
+    Payment:
+      type: object
+      required: [transactionId, orderId, status, amountMinor, currency, method, last4, rejectionCode, createdAt]
+      properties:
+        transactionId: { type: string, format: uuid, description: payments.id }
+        orderId: { type: string, format: uuid }
+        status: { type: string, enum: [approved, rejected] }
+        amountMinor: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        method: { type: string, enum: [demo_card] }
+        last4: { type: string, enum: ['0000', '1111'] }
+        rejectionCode:
+          type: string
+          nullable: true
+          enum: [PAYMENT_REJECTED, null]
+        createdAt: { type: string, format: date-time, description: Instante del resultado (UTC) }
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        requestId: { type: string }
