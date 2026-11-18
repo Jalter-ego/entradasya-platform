@@ -55,7 +55,7 @@ Migración: [`1763700000000_init-checkins.sql`](../services/checkin/migrations/1
 ## 3. Frontend de Portería (`apps/web/src/features/checkin`)
 
 - **Ruta protegida:** `/porteria` mediante `<RequireRole role="doorman">` en [`App.tsx`](../apps/web/src/App.tsx).
-- **Navegación y login:** enlace **Portería** en [`Layout.tsx`](../apps/web/src/shared/Layout.tsx) y redirección automática tras iniciar sesión como `doorman` en [`LoginPage.tsx`](../apps/web/src/shared/LoginPage.tsx).
+- **Navegación y login:** enlace **Portería** en [`Layout.tsx`](../apps/web/src/shared/Layout.tsx) y redirección tras iniciar sesión como `doorman` desde [`LoginPage.tsx`](../apps/web/src/features/auth/LoginPage.tsx).
 - **Funcionalidades de [`CheckinPage.tsx`](../apps/web/src/features/checkin/pages/CheckinPage.tsx):**
   - Selector de eventos publicados (`GET /api/events`) con fecha, lugar y ciudad.
   - Entrada de código con `autoFocus` continuo (pensado para lector QR USB que actúa como teclado + `Enter` o ingreso manual).
@@ -92,5 +92,5 @@ Archivos: [`entradasya.conf`](../infra/nginx/entradasya.conf), [`entradasya.dev.
 1. Configura los `.env` de cada servicio (en local o apuntando al **Session pooler puerto `5432`** de Supabase con su respectivo `DB_SCHEMA`).
 2. Ejecuta `.\scripts\dev\start-local.ps1` y luego `.\scripts\smoke\check-health.ps1`.
 3. Abre `http://localhost:5173/login`:
-   - Inicia sesión como **Portero** (`portero@demo.bo` / `demo1234`).
+   - Inicia sesión como **Portero** (`portero@demo.bo`) con la contraseña configurada al [sembrar auth](../services/auth/README.md#cuentas-de-demo).
    - Selecciona un evento publicado, ingresa el código de una entrada emitida por `tickets` y verifica que el primer escaneo devuelva **APROBADO** (conteo `+1`) y el segundo **RECHAZADO — Entrada ya utilizada** con la hora del primer ingreso.

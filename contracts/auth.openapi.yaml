@@ -1,0 +1,165 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa Auth
+  version: 1.0.0
+  description: |
+    Registro de clientes e inicio de sesión para los tres roles de EntradasYa.
+    El JWT de acceso usa RS256 y contiene sub (UUID), role, email, iss, aud, iat y exp.
+    Los valores por defecto son iss=entradasya-auth y aud=entradasya.
+    Events, orders, tickets y checkin validan el JWT localmente con la clave pública.
+servers:
+  - url: http://127.0.0.1:3001
+    description: Servicio local
+  - url: http://localhost:8080
+    description: Gateway para las rutas /api/auth
+paths:
+  /health:
+    get:
+      operationId: authHealth
+      summary: Comprueba que auth pueda consultar la tabla users
+      servers:
+        - url: http://127.0.0.1:3001
+      responses:
+        '200':
+          description: Auth disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { type: string, enum: [ok] }
+                  service: { type: string, enum: [auth] }
+              example: { status: ok, service: auth }
+        '503':
+          description: DB_UNAVAILABLE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/auth/register:
+    post:
+      operationId: registerCustomer
+      summary: Crea un cliente y emite su token de acceso
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterBody' }
+            example: { name: Ana Pérez, email: ana@example.com, password: frase-de-ejemplo }
+      responses:
+        '201':
+          $ref: '#/components/responses/Authenticated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: EMAIL_TAKEN para correos ya registrados o reservados para la semilla
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/auth/login:
+    post:
+      operationId: login
+      summary: Verifica correo y contraseña y emite un token del rol guardado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginBody' }
+            example: { email: ana@example.com, password: frase-de-ejemplo }
+      responses:
+        '200':
+          $ref: '#/components/responses/Authenticated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: INVALID_CREDENTIALS
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error:
+                  code: INVALID_CREDENTIALS
+                  message: El correo o la contraseña no son correctos.
+                requestId: 1ef057a3-ec07-4bd5-9e06-d9081ac2ba78
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  responses:
+    Authenticated:
+      description: Sesión iniciada
+      headers:
+        Cache-Control:
+          schema: { type: string, example: no-store }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token, user]
+            properties:
+              token: { type: string, description: JWT para Authorization Bearer }
+              user: { $ref: '#/components/schemas/User' }
+    BadRequest:
+      description: VALIDATION_ERROR o INVALID_JSON
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PayloadTooLarge:
+      description: PAYLOAD_TOO_LARGE
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnsupportedMediaType:
+      description: UNSUPPORTED_MEDIA_TYPE
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: INTERNAL_ERROR
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    LoginBody:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, format: password, minLength: 1, maxLength: 128 }
+    RegisterBody:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, format: password, minLength: 8, maxLength: 128 }
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [customer, organizer, doorman] }
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        requestId: { type: string }

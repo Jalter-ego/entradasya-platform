@@ -4,7 +4,7 @@ param(
 )
 
 $targets = @(
-  @{ Name = 'auth';          Url = 'http://127.0.0.1:3001/health'; Required = $false },
+  @{ Name = 'auth';          Url = 'http://127.0.0.1:3001/health'; Required = $true },
   @{ Name = 'events';        Url = 'http://127.0.0.1:3002/health'; Required = $true },
   @{ Name = 'orders';        Url = 'http://127.0.0.1:3003/health'; Required = $false },
   @{ Name = 'payments';      Url = 'http://127.0.0.1:3004/health'; Required = $false },

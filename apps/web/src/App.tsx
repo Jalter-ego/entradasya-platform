@@ -1,4 +1,7 @@
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
+import { LoginPage } from './features/auth/LoginPage';
+import { RequireRole } from './features/auth/RequireRole';
+import { SessionProvider } from './features/auth/session';
 import { OrganizerLayout } from './features/events/components/OrganizerLayout';
 import { CheckinPage } from './features/checkin/pages/CheckinPage';
 import { CatalogPage } from './features/events/pages/CatalogPage';
@@ -10,9 +13,6 @@ import { MyOrdersPage } from './features/orders/pages/MyOrdersPage';
 import { OrderResultPage } from './features/orders/pages/OrderResultPage';
 import { MyTicketsPage } from './features/tickets/pages/MyTicketsPage';
 import { Layout } from './shared/Layout';
-import { LoginPage } from './shared/LoginPage';
-import { RequireRole } from './shared/RequireRole';
-import { SessionProvider } from './shared/session';
 
 function NotFound() {
   return (

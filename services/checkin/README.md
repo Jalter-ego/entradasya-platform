@@ -38,7 +38,7 @@ CREATE DATABASE checkin_db OWNER checkin_user;
 
 En `.env` configura:
 1. `DATABASE_URL` apuntando a `checkin_db`.
-2. `JWT_PUBLIC_KEY_FILE` apuntando a la clave pública compartida (en desarrollo, la misma usada con `events` y `tickets`, por ejemplo `../events/keys/auth-public.pem` o copia en `./keys/auth-public.pem`).
+2. `JWT_PUBLIC_KEY_FILE` apuntando al PEM público de [auth](../auth/README.md), por ejemplo `../auth/keys/auth-public.pem` o una copia en `./keys/auth-public.pem`.
 3. `TICKETS_URL=http://127.0.0.1:3005`.
 4. `INTERNAL_TOKEN_CHECKIN`: exactamente el mismo token aleatorio (≥ 24 caracteres) configurado en `services/tickets/.env`.
 

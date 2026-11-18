@@ -82,7 +82,7 @@ Detener con `Ctrl+C`; los PDF y los datos se conservan. El servidor no crea tabl
 | `INTERNAL_TOKEN_CHECKIN` | Autoriza únicamente validación para portería. |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` o `silent`. |
 
-No guardar `.env`, claves, archivos de base ni PDF en Git. La configuración real de P1 todavía debe acordarse con el equipo; no existe un modo de saltarse la autenticación.
+Guardar `.env`, claves, archivos de base y PDF fuera de Git. El [servicio auth](../auth/README.md) documenta los parámetros del JWT.
 
 ## Integración con P3: orders
 

@@ -67,7 +67,7 @@
   font: 600 0.95rem var(--font-body);
   cursor: pointer;
 }
-.auth__tabs button[aria-selected='true'] {
+.auth__tabs button[aria-pressed='true'] {
   background: var(--surface-2);
   color: var(--text);
 }
@@ -115,62 +115,6 @@
 }
 .input-icon__toggle:hover {
   color: var(--text);
-}
-
-.auth__demo {
-  padding-top: 18px;
-  border-top: 1px dashed var(--line);
-}
-.auth__demo h2 {
-  font-size: 1rem;
-  margin: 0 0 4px;
-}
-.auth__demo p {
-  margin: 0 0 12px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.auth__demo ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.auth__demo li button {
-  width: 100%;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas:
-    'label email'
-    'label hint';
-  column-gap: 14px;
-  text-align: left;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-.auth__demo li button:hover {
-  border-color: var(--accent);
-}
-.auth__demo strong {
-  grid-area: label;
-  align-self: center;
-  min-width: 92px;
-  color: var(--accent-text);
-  font-size: 0.9rem;
-}
-.auth__demo span {
-  grid-area: email;
-  font-size: 0.9rem;
-}
-.auth__demo small {
-  grid-area: hint;
-  color: var(--muted);
 }
 
 .auth__back {
