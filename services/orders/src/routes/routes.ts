@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Clients } from '../clients/clients.js';
 import { ERROR_CODES, SERVICE_NAME } from '../constants/constants.js';
 import { checkSchema, type Db } from '../database/database.js';
 import type { VerifyToken } from '../types/auth.js';
@@ -7,6 +8,7 @@ import { ApiResponse } from '../utils/apiResponse.js';
 export interface RouteDeps {
   db: Db;
   verifyToken: VerifyToken;
+  clients: Clients;
 }
 
 export function createRoutes({ db }: RouteDeps): Router {

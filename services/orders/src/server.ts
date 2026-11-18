@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { createClients } from './clients/clients.js';
 import { config, validateConfig } from './config/config.js';
 import { SHUTDOWN_TIMEOUT_MS } from './constants/constants.js';
 import { checkSchema, createPool } from './database/database.js';
@@ -12,7 +13,7 @@ async function start() {
   try {
     const verifyToken = await createJwtVerifier();
     await checkSchema(db);
-    const app = createApp({ db, verifyToken });
+    const app = createApp({ db, verifyToken, clients: createClients() });
     const server = app.listen(config.port, config.host, () => log('info', 'listening', {
       host: config.host, port: config.port,
     }));

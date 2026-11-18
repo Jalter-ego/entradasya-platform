@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Clients } from './clients/clients.js';
 import { BODY_LIMIT } from './constants/constants.js';
 import type { Db } from './database/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -10,6 +11,7 @@ import type { VerifyToken } from './types/auth.js';
 export interface AppDeps {
   db: Db;
   verifyToken: VerifyToken;
+  clients: Clients;
 }
 
 export function createApp(deps: AppDeps) {

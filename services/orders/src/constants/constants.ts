@@ -21,6 +21,17 @@ export const ROLES = {
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
+export const INTERNAL_TOKEN_MIN_LENGTH = 24;
+
+export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
+
+/** Motivos de una llamada interna sin respuesta definitiva: el resultado remoto es desconocido. */
+export const REMOTE_UNAVAILABLE = {
+  TIMEOUT: 'TIMEOUT',
+  NETWORK_ERROR: 'NETWORK_ERROR',
+  INVALID_RESPONSE: 'INVALID_RESPONSE',
+} as const;
+
 export const PAGINATION = {
   defaultPerPage: 10,
   maxPerPage: 100,
