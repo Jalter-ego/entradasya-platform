@@ -26,6 +26,7 @@ src/
 ├── styles/global.css    # colores, tipografía y componentes base
 └── features/
     ├── events/          # P2: cartelera, detalle, organizador
+    ├── orders/          # P3: checkout, resultado y Mis compras
     └── tickets/         # P5: Mis entradas y descarga autenticada
 ```
 
@@ -56,9 +57,22 @@ Contraseña de todas: `demo1234`. La pantalla `/login` las muestra con un botón
 ### Lo que espera de otros
 
 - **P1 (auth):** reemplazar `shared/session.tsx` conservando `useSession()` → `{ token, user, signIn, signOut }`, y el encabezado. La pantalla `/login` (`shared/LoginPage.tsx`) se puede reutilizar: solo hay que cambiar `LOGIN_URL` en `shared/authApi.ts` a `/api/auth/login` y borrar `dev-auth.ts`.
-- **P3 (orders):**
-  - La ruta `/checkout`, que hoy es un marcador.
-  - El reporte `GET /api/orders/reports/events/:eventId` con la forma de `SalesReport` en `features/events/api.ts`: `{ eventId, currency, paidOrders, ticketsSold, revenueMinor, bySector? }`. Si cambia, se ajusta ahí. Hasta que exista, el panel muestra los lugares reservados.
+- **P3 (orders):** ✅ `/checkout` ya está implementado (ver la feature orders). El reporte `GET /api/orders/reports/events/:eventId` se adapta en `eventsApi.salesReport` a la forma de `SalesReport` que usa el panel: desenvuelve `data`, renombra `ordersPaid` → `paidOrders` y `sectors` → `bySector`, y usa la moneda del evento cuando no hay ventas. Si orders no responde, el panel muestra los lugares reservados.
+
+## Feature orders (P3)
+
+| Ruta | Pantalla |
+|---|---|
+| `/checkout?eventId&sectorId&quantity` | Resumen de la selección hecha en el detalle del evento, pago de demo y confirmación. Solo `role=customer`. |
+| `/compras/:id` | Resultado: pagada (enlace a `/mis-entradas?orderId=`), rechazada (motivo y vuelta al evento) o en proceso (reintento). |
+| `/mis-compras` | Compras del cliente con estado, total y paginación de 10. |
+
+- **Idempotencia:** el checkout envía `Idempotency-Key`, que se genera en `features/orders/idempotency.ts`. Mientras la compra sea la misma (doble clic, timeout, recarga) se reutiliza la misma clave y el backend no crea otra orden ni cobra dos veces. Al cambiar la selección o el pago se genera otra clave, y se olvida al recibir la orden.
+- **Precio:** el navegador nunca envía precio ni total; el total del checkout es solo de referencia.
+- **Respuestas:** orders responde con un envoltorio `{ success, message, data, meta, requestId }`, y `features/orders/api.ts` lo desenvuelve. Los errores mantienen `{ error: { code, message } }`, así que `shared/api.ts` los traduce sin cambios.
+- **Reintento:** en `/compras/:id`, "Reintentar" llama a `POST /api/orders/:id/retry`. Completa solo los pasos pendientes (emisión, correo, pago incierto) sin cobrar otra vez.
+- **Pago provisional para P4:** `features/orders/components/DemoPaymentFields.tsx` es provisional y pide solo la terminación `1111` (aprueba) o `0000` (rechaza). Cuando exista el `PaymentFields` de P4, reemplazarlo en `CheckoutPage` con la misma interfaz `{ value, onChange, disabled }`, donde `value = { method: 'demo_card', last4 }`.
+- **Cambios compartidos:** `shared/api.ts` acepta `headers` opcionales, y `shared/Layout.tsx` muestra «Mis compras» a los clientes.
 
 ## Feature tickets (P5)
 
