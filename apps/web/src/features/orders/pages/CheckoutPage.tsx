@@ -8,7 +8,7 @@ import { ErrorState, Spinner } from '../../../shared/States';
 import { useAsync } from '../../../shared/useAsync';
 import { eventsApi } from '../../events/api';
 import { ordersApi, orderErrorMessage, type DemoPayment, type OrderCreate } from '../api';
-import { DemoPaymentFields } from '../components/DemoPaymentFields';
+import { PaymentFields } from '../../payments/PaymentFields';
 import { checkoutKey, forgetCheckoutKey } from '../idempotency';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -88,7 +88,7 @@ function Checkout({ eventId, sectorId, quantity }: { eventId: string; sectorId: 
             void confirm();
           }}
         >
-          <DemoPaymentFields value={payment} onChange={setPayment} disabled={submitting} />
+          <PaymentFields value={payment} onChange={setPayment} disabled={submitting} />
           {error && <p className="form-error" role="alert">{error}</p>}
           <button type="submit" className="btn btn--primary btn--lg btn--block" disabled={submitting}>
             {submitting ? 'Procesando tu compra…' : error ? 'Reintentar compra' : 'Pagar y confirmar'}

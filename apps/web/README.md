@@ -27,6 +27,7 @@ src/
 └── features/
     ├── events/          # P2: cartelera, detalle, organizador
     ├── orders/          # P3: checkout, resultado y Mis compras
+    ├── payments/        # P4: PaymentFields (pago de demo dentro del checkout)
     └── tickets/         # P5: Mis entradas y descarga autenticada
 ```
 
@@ -71,8 +72,19 @@ Contraseña de todas: `demo1234`. La pantalla `/login` las muestra con un botón
 - **Precio:** el navegador nunca envía precio ni total; el total del checkout es solo de referencia.
 - **Respuestas:** orders responde con un envoltorio `{ success, message, data, meta, requestId }`, y `features/orders/api.ts` lo desenvuelve. Los errores mantienen `{ error: { code, message } }`, así que `shared/api.ts` los traduce sin cambios.
 - **Reintento:** en `/compras/:id`, "Reintentar" llama a `POST /api/orders/:id/retry`. Completa solo los pasos pendientes (emisión, correo, pago incierto) sin cobrar otra vez.
-- **Pago provisional para P4:** `features/orders/components/DemoPaymentFields.tsx` es provisional y pide solo la terminación `1111` (aprueba) o `0000` (rechaza). Cuando exista el `PaymentFields` de P4, reemplazarlo en `CheckoutPage` con la misma interfaz `{ value, onChange, disabled }`, donde `value = { method: 'demo_card', last4 }`.
+- **Pago (P4):** `CheckoutPage` usa `PaymentFields` de `features/payments`, con la interfaz `{ value, onChange, disabled }` y `value = { method: 'demo_card', last4 }`. Reemplazó al provisional `DemoPaymentFields`.
 - **Cambios compartidos:** `shared/api.ts` acepta `headers` opcionales, y `shared/Layout.tsx` muestra «Mis compras» a los clientes.
+
+## Feature payments (P4)
+
+`features/payments/PaymentFields.tsx` es el componente de pago simulado que se monta dentro del formulario del checkout. No tiene rutas ni llama a ninguna API: devuelve `{ method: 'demo_card', last4 }` y el checkout lo envía a **orders** dentro de `POST /api/orders`. La web nunca llama a payments, que es interno.
+
+| Terminación | Resultado |
+|---|---|
+| `1111` | Pago aprobado. |
+| `0000` | Pago rechazado (para probar la liberación de cupos). |
+
+No pide número de tarjeta, CVV ni importe: el total lo calcula orders con el precio de la reserva. Muestra una tarjeta de demo con el resultado esperado y se deshabilita mientras se procesa la compra. Estilos en `payments.css`, con los tokens de `global.css`.
 
 ## Feature tickets (P5)
 

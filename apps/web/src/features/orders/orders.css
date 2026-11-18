@@ -14,20 +14,6 @@
 }
 .checkout__summary { position: sticky; top: 24px; }
 
-.demo-payment__option {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 14px 16px;
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  cursor: pointer;
-}
-.demo-payment__option.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.demo-payment__option input { margin-top: 4px; accent-color: var(--accent); }
-.demo-payment__option > span { display: grid; gap: 2px; }
-
 /* ------------------------------------------------------------ resumen */
 .order-summary { display: grid; gap: 12px; margin: 0; }
 .order-summary > div { display: flex; justify-content: space-between; gap: 16px; }
