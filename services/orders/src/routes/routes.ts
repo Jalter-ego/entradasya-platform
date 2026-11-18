@@ -3,7 +3,9 @@ import type { Clients } from '../clients/clients.js';
 import { ERROR_CODES, SERVICE_NAME } from '../constants/constants.js';
 import { OrdersController } from '../controllers/ordersController.js';
 import { checkSchema, type Db } from '../database/database.js';
+import { ReportsController } from '../controllers/reportsController.js';
 import { OrdersRepository } from '../repositories/ordersRepository.js';
+import { ReportsRepository } from '../repositories/reportsRepository.js';
 import { OrderProcessor } from '../services/orderProcessor.js';
 import { PurchaseService } from '../services/purchaseService.js';
 import type { VerifyToken } from '../types/auth.js';
@@ -21,7 +23,10 @@ export function createRoutes({ db, verifyToken, clients }: RouteDeps): Router {
 
   const repo = new OrdersRepository(db);
   const purchases = new PurchaseService(repo, new OrderProcessor(db, repo, clients));
-  const ordersController = new OrdersController(repo, purchases);
+  const controllers = {
+    orders: new OrdersController(repo, purchases),
+    reports: new ReportsController(new ReportsRepository(db)),
+  };
 
   router.get('/health', async (_req, res) => {
     try {
@@ -32,7 +37,7 @@ export function createRoutes({ db, verifyToken, clients }: RouteDeps): Router {
     }
   });
 
-  router.use('/api/orders', ordersRoutes(ordersController, verifyToken));
+  router.use('/api/orders', ordersRoutes(controllers, verifyToken));
 
   return router;
 }
