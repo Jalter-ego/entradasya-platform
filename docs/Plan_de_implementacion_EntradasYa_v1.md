@@ -186,12 +186,12 @@ Esta preparación no incluye implementar los servicios: cada responsable inicial
 
 ### P2 - Eventos y cupos
 
-- [ ] B1. Mantener las migraciones de `events`, `sectors` y `reservations` en `events_db` según el [esquema P2](database/README.md#4-p2--events_db); agregar con nueva migración el snapshot inmutable de la reserva y ajustar su lectura, contrato y pruebas.
-- [ ] B2. Crear, editar, publicar y cancelar eventos; guardar imagen como URL para evitar un sistema de subida de archivos en esta entrega.
-- [ ] B3. Listado público solo de publicados; listado privado de los eventos propios, incluidos borradores. El organizador solo modifica sus eventos.
-- [ ] B4. Sectores con precio y capacidad; reserva y liberación por `orderId`.
-- [ ] B5. Descontar cupos en una transacción con bloqueo o actualización condicional. Repetir la misma reserva no descuenta otra vez; repetir la liberación tampoco suma dos veces. Una edición no puede reducir capacidad por debajo del cupo ya comprometido.
-- [ ] B6. Implementar cartelera, detalle y formulario del organizador. Mostrar sus ventas e ingresos consumiendo el reporte de orders, no leyendo su base.
+- [x] B1. Mantener las migraciones de `events`, `sectors` y `reservations` en `events_db` según el [esquema P2](database/README.md#4-p2--events_db); agregar con nueva migración el snapshot inmutable de la reserva y ajustar su lectura, contrato y pruebas.
+- [x] B2. Crear, editar, publicar y cancelar eventos; guardar imagen como URL para evitar un sistema de subida de archivos en esta entrega.
+- [x] B3. Listado público solo de publicados; listado privado de los eventos propios, incluidos borradores. El organizador solo modifica sus eventos.
+- [x] B4. Sectores con precio y capacidad; reserva y liberación por `orderId`.
+- [x] B5. Descontar cupos en una transacción con bloqueo o actualización condicional. Repetir la misma reserva no descuenta otra vez; repetir la liberación tampoco suma dos veces. Una edición no puede reducir capacidad por debajo del cupo ya comprometido.
+- [x] B6. Implementar cartelera, detalle y formulario del organizador. Mostrar sus ventas e ingresos consumiendo el reporte de orders, no leyendo su base.
 
 **Terminado cuando:** dos compras concurrentes por el último cupo no pueden ser aprobadas ambas; un pago rechazado permite recuperar exactamente los cupos reservados.
 
