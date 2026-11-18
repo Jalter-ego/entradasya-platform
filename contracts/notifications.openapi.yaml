@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: EntradasYa - notifications (interno)
+  version: 1.0.0
+  description: |
+    Correo de confirmación de compra (P4). Servicio **interno** y sin base de datos:
+    solo lo llama orders, con `X-Internal-Token`. Envía por SMTP a Mailpit; no hay correo real.
+
+    - El destinatario es el correo del JWT validado por orders, nunca uno enviado por el navegador.
+    - El correo enlaza a `<PUBLIC_WEB_URL>/mis-entradas?orderId=...`. No incluye JWT, token
+      ni ruta directa al PDF: el cliente inicia sesión y tickets comprueba que las entradas son suyas.
+    - SMTP no garantiza envío exactamente una vez. Un reintento de orders puede duplicar el correo
+      (con el mismo Message-ID); nunca duplica órdenes, pagos ni entradas.
+    - Un fallo del correo no revierte la compra: orders registra `notification_status`.
+    - Errores: `{ error: { code, message }, requestId }`.
+servers:
+  - url: http://127.0.0.1:3006
+    description: Servicio directo (solo red local); no pasa por Nginx
+tags:
+  - name: orders
+paths:
+  /health:
+    get:
+      summary: Comprueba que el servidor SMTP (Mailpit) responde
+      responses:
+        '200':
+          description: Disponible
+          content:
+            application/json:
+              example: { status: ok, service: notifications }
+        '503':
+          description: SMTP no disponible
+          content:
+            application/json:
+              example:
+                status: unavailable
+                service: notifications
+                error: { code: SMTP_UNAVAILABLE, message: El servidor SMTP no responde }
+                requestId: 3f1c...
+
+  /internal/notifications/purchase:
+    post:
+      tags: [orders]
+      summary: Enviar la confirmación de una compra pagada
+      security: [{ ordersToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseNotification' }
+            example:
+              orderId: 40000000-0000-4000-8000-000000000001
+              to: cliente@demo.bo
+              event:
+                title: Noche de Rock
+                venue: Estadio Central
+                startsAt: '2026-12-20T23:00:00.000Z'
+              sector: { name: General }
+              quantity: 2
+              totalMinor: 10000
+              currency: BOB
+      responses:
+        '200':
+          description: El servidor SMTP aceptó el correo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sent' }
+              example:
+                orderId: 40000000-0000-4000-8000-000000000001
+                status: sent
+                messageId: <compra-40000000-0000-4000-8000-000000000001@entradasya.local>
+                sentAt: '2026-11-18T17:20:00.000Z'
+        '400':
+          description: Cuerpo inválido o con campos extra. No se envía nada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Falta X-Internal-Token o es incorrecto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: SMTP_UNAVAILABLE — no se pudo conectar o entregar al servidor SMTP. No se envió.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '504':
+          description: SMTP_TIMEOUT — el servidor SMTP no respondió dentro de SMTP_TIMEOUT_MS. Resultado desconocido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    ordersToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+      description: Token exclusivo del par orders → notifications (INTERNAL_TOKEN_ORDERS / NOTIFICATIONS_INTERNAL_TOKEN).
+  schemas:
+    PurchaseNotification:
+      type: object
+      additionalProperties: false
+      required: [orderId, to, event, sector, quantity, totalMinor, currency]
+      properties:
+        orderId: { type: string, format: uuid }
+        to: { type: string, format: email, maxLength: 254, description: Correo del JWT del comprador }
+        event:
+          type: object
+          additionalProperties: false
+          required: [title, venue, startsAt]
+          properties:
+            title: { type: string, minLength: 1, maxLength: 200, description: Una línea, sin saltos }
+            venue: { type: string, minLength: 1, maxLength: 200 }
+            startsAt: { type: string, format: date-time }
+        sector:
+          type: object
+          additionalProperties: false
+          required: [name]
+          properties:
+            name: { type: string, minLength: 1, maxLength: 100 }
+        quantity: { type: integer, minimum: 1, maximum: 6 }
+        totalMinor: { type: integer, minimum: 0, description: Unidades menores (10000 = 100,00 BOB) }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+    Sent:
+      type: object
+      required: [orderId, status, messageId, sentAt]
+      properties:
+        orderId: { type: string, format: uuid }
+        status: { type: string, enum: [sent] }
+        messageId: { type: string }
+        sentAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        requestId: { type: string }
