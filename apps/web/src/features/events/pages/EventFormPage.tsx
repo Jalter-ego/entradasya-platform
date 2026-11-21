@@ -24,6 +24,7 @@ import {
   type SectorDraft,
 } from '../components/SectorsEditor';
 import { StatusBadge } from '../components/StatusBadge';
+import { coverFileError } from '../components/EventCoverField';
 
 type Flash = { kind: 'ok' | 'error'; text: string } | null;
 
@@ -42,10 +43,14 @@ function CreateEvent() {
   const [errors, setErrors] = useState<ReturnType<typeof validateFields>>({});
   const [flash, setFlash] = useState<Flash>(null);
   const [saving, setSaving] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const fieldErrors = validateFields(values);
+    const fieldErrors = validateFields(coverFile ? { ...values, imageUrl: '' } : values);
+    const imageError = coverFileError(coverFile);
+    if (imageError) fieldErrors.imageUrl = imageError;
     setErrors(fieldErrors);
     const parsed = drafts.map(parseDraft);
     const sectorError = parsed.find((p) => p.error)?.error;
@@ -65,12 +70,26 @@ function CreateEvent() {
     try {
       const created = await eventsApi.create(token, {
         ...toEventInput(values),
+        ...(coverFile ? { imageUrl: null } : {}),
         sectors: parsed.map((p) => p.value!),
       });
+      if (coverFile) {
+        setUploading(true);
+        try {
+          await eventsApi.uploadCover(token, created.id, coverFile);
+        } catch (err) {
+          navigate(`/organizador/eventos/${created.id}`, { state: {
+            created: true,
+            coverError: `El borrador se guardó, pero no se pudo subir la portada: ${describeError(err)} Vuelve a seleccionar el archivo y guarda los cambios.`,
+          } });
+          return;
+        }
+      }
       navigate(`/organizador/eventos/${created.id}`, { state: { created: true } });
     } catch (err) {
       setFlash({ kind: 'error', text: describeError(err) });
       setSaving(false);
+      setUploading(false);
     }
   }
 
@@ -85,7 +104,8 @@ function CreateEvent() {
       <form onSubmit={submit} className="form-stack" noValidate>
         <div className="panel">
           <h2 className="panel__title">Datos del evento</h2>
-          <EventFields values={values} errors={errors} disabled={saving} onChange={setValues} />
+          <EventFields values={values} errors={errors} disabled={saving} onChange={setValues}
+            coverFile={coverFile} onCoverFileChange={setCoverFile} />
         </div>
         <div className="panel">
           <h2 className="panel__title">Sectores y precios</h2>
@@ -98,7 +118,7 @@ function CreateEvent() {
         )}
         <div className="form-actions">
           <button type="submit" className="btn btn--primary btn--lg" disabled={saving}>
-            {saving ? 'Guardando…' : 'Guardar borrador'}
+            {uploading ? 'Subiendo portada…' : saving ? 'Guardando…' : 'Guardar borrador'}
           </button>
         </div>
       </form>
@@ -138,13 +158,16 @@ function EditEvent({ id }: { id: string }) {
 }
 
 function EditEventForm({ initial, token }: { initial: EventItem; token: string | null }) {
-  const justCreated = (useLocation().state as { created?: boolean } | null)?.created === true;
+  const locationState = useLocation().state as { created?: boolean; coverError?: string } | null;
+  const justCreated = locationState?.created === true;
   const [event, setEvent] = useState(initial);
   const [values, setValues] = useState(toFieldValues(initial));
   const [errors, setErrors] = useState<ReturnType<typeof validateFields>>({});
   const [flash, setFlash] = useState<Flash>(
-    justCreated ? { kind: 'ok', text: 'Borrador guardado. Revisa los sectores y publícalo cuando esté listo.' } : null,
+    locationState?.coverError ? { kind: 'error', text: locationState.coverError } :
+      justCreated ? { kind: 'ok', text: 'Borrador guardado. Revisa los sectores y publícalo cuando esté listo.' } : null,
   );
+  const [coverFile, setCoverFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const locked = event.status === 'cancelled';
 
@@ -169,7 +192,9 @@ function EditEventForm({ initial, token }: { initial: EventItem; token: string |
     // La fecha solo se valida (y se envía) si el organizador la cambió: así se puede
     // corregir el título de un evento cuya fecha ya pasó.
     const dateChanged = values.startsAt !== toFieldValues(event).startsAt;
-    const fieldErrors = validateFields(values, { requireFutureDate: dateChanged });
+    const fieldErrors = validateFields(coverFile ? { ...values, imageUrl: '' } : values, { requireFutureDate: dateChanged });
+    const imageError = coverFileError(coverFile);
+    if (imageError) fieldErrors.imageUrl = imageError;
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length) return;
 
@@ -177,13 +202,29 @@ function EditEventForm({ initial, token }: { initial: EventItem; token: string |
     const patch: Partial<EventInput> = {};
     (Object.keys(next) as (keyof EventInput)[]).forEach((k) => {
       if (k === 'startsAt' && !dateChanged) return;
+      if (k === 'imageUrl' && coverFile) return;
       if (next[k] !== event[k]) (patch as Record<string, unknown>)[k] = next[k];
     });
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && !coverFile) {
       setFlash({ kind: 'ok', text: 'No hay cambios para guardar.' });
       return;
     }
-    const ok = await run('Cambios guardados.', () => eventsApi.update(token, event.id, patch));
+    const ok = await run('Cambios guardados.', async () => {
+      let updated = event;
+      if (Object.keys(patch).length) {
+        updated = await eventsApi.update(token, event.id, patch);
+        setEvent(updated);
+      }
+      if (coverFile) {
+        try { updated = await eventsApi.uploadCover(token, event.id, coverFile); }
+        catch (err) {
+          throw new Error(`No se pudo subir la portada: ${describeError(err)} ${Object.keys(patch).length ? 'Los demás datos ya se guardaron. ' : ''}Puedes reintentar con Guardar cambios.`);
+        }
+        setCoverFile(null);
+        setValues((previous) => ({ ...previous, imageUrl: updated.imageUrl ?? '' }));
+      }
+      return updated;
+    });
     if (ok) setErrors({});
   }
 
@@ -238,11 +279,12 @@ function EditEventForm({ initial, token }: { initial: EventItem; token: string |
 
         <form className="panel" onSubmit={saveDetails} noValidate>
           <h2 className="panel__title">Datos del evento</h2>
-          <EventFields values={values} errors={errors} disabled={busy || locked} onChange={setValues} />
+          <EventFields values={values} errors={errors} disabled={busy || locked} onChange={setValues}
+            coverFile={coverFile} onCoverFileChange={setCoverFile} />
           {!locked && (
             <div className="form-actions">
               <button type="submit" className="btn btn--primary" disabled={busy}>
-                Guardar cambios
+                {busy ? 'Guardando…' : 'Guardar cambios'}
               </button>
             </div>
           )}

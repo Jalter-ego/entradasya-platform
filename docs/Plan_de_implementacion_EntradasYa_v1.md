@@ -189,7 +189,7 @@ Implementación, arranque y verificación en [P1 · Autenticación y acceso](P1_
 ### P2 - Eventos y cupos
 
 - [x] B1. Mantener las migraciones de `events`, `sectors` y `reservations` en `events_db` según el [esquema P2](database/README.md#4-p2--events_db); agregar con nueva migración el snapshot inmutable de la reserva y ajustar su lectura, contrato y pruebas.
-- [x] B2. Crear, editar, publicar y cancelar eventos; guardar imagen como URL para evitar un sistema de subida de archivos en esta entrega.
+- [x] B2. Crear, editar, publicar y cancelar eventos; permitir portada desde el dispositivo (JPEG, PNG o WebP, hasta 3 MB) con vista previa y conservar enlaces externos. Events guarda el archivo en `EVENTS_STORAGE_DIR`, fuera del repositorio, y su ruta pública en `events.image_url`, según el [esquema P2](database/README.md#4-p2--events_db) y el [contrato HTTP](../contracts/events.openapi.yaml). Solo el organizador dueño puede subir/reemplazar la portada; Nginx admite hasta 4 MB en `/api/events` para incluir el multipart.
 - [x] B3. Listado público solo de publicados; listado privado de los eventos propios, incluidos borradores. El organizador solo modifica sus eventos.
 - [x] B4. Sectores con precio y capacidad; reserva y liberación por `orderId`.
 - [x] B5. Descontar cupos en una transacción con bloqueo o actualización condicional. Repetir la misma reserva no descuenta otra vez; repetir la liberación tampoco suma dos veces. Una edición no puede reducir capacidad por debajo del cupo ya comprometido.

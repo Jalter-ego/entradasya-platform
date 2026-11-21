@@ -1,6 +1,7 @@
 import { isoToLocalInput, localInputToIso } from '../../../shared/format';
 import type { EventInput } from '../api';
 import { CATEGORIES, CITIES, categoryLabel } from '../catalog';
+import { EventCoverField, isManagedCover } from './EventCoverField';
 
 export interface EventFieldValues {
   title: string;
@@ -48,7 +49,7 @@ export function validateFields(
   if (!v.category) errors.category = 'Elige una categoría.';
   if (!v.startsAt) errors.startsAt = 'Elige la fecha y la hora.';
   else if (requireFutureDate && new Date(v.startsAt).getTime() <= Date.now()) errors.startsAt = 'La fecha debe ser futura.';
-  if (v.imageUrl.trim() && !/^https?:\/\/\S+$/i.test(v.imageUrl.trim())) {
+  if (v.imageUrl.trim() && !isManagedCover(v.imageUrl.trim()) && !/^https?:\/\/\S+$/i.test(v.imageUrl.trim())) {
     errors.imageUrl = 'Usa un enlace que empiece con http:// o https://';
   }
   return errors;
@@ -59,9 +60,11 @@ interface Props {
   errors: Partial<Record<keyof EventFieldValues, string>>;
   disabled?: boolean;
   onChange: (values: EventFieldValues) => void;
+  coverFile: File | null;
+  onCoverFileChange: (file: File | null) => void;
 }
 
-export function EventFields({ values, errors, disabled, onChange }: Props) {
+export function EventFields({ values, errors, disabled, onChange, coverFile, onCoverFileChange }: Props) {
   const set = (key: keyof EventFieldValues) => (e: { target: { value: string } }) =>
     onChange({ ...values, [key]: e.target.value });
 
@@ -122,19 +125,8 @@ export function EventFields({ values, errors, disabled, onChange }: Props) {
           </select>,
         )}
       </div>
-      {field(
-        'imageUrl',
-        'Imagen (enlace)',
-        <input
-          className="input"
-          type="url"
-          inputMode="url"
-          value={values.imageUrl}
-          onChange={set('imageUrl')}
-          placeholder="https://"
-        />,
-        'Opcional. Se recomienda una imagen horizontal (16:9).',
-      )}
+      <EventCoverField imageUrl={values.imageUrl} file={coverFile} onFileChange={onCoverFileChange}
+        error={errors.imageUrl} onUrlChange={(imageUrl) => onChange({ ...values, imageUrl })} />
       {field(
         'description',
         'Descripción',

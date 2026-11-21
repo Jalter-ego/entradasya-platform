@@ -96,7 +96,7 @@ La semilla debe ser idempotente. Estos IDs se conservan para que los eventos de 
 | `description` | `text` | No | Default `''`; máximo 5000 en API. |
 | `venue` | `text` | No | Longitud de 1 a 200. |
 | `starts_at` | `timestamptz` | No | Fecha/hora del evento. |
-| `image_url` | `text` | Sí | URL HTTP(S); máximo 2000 en API. |
+| `image_url` | `text` | Sí | URL HTTP(S) externa (máximo 2000 en API) o ruta `/api/events/covers/<uuid>.<ext>` generada por la subida. El archivo se guarda fuera de PostgreSQL. |
 | `currency` | `char(3)` | No | Código de moneda; configurar `CURRENCY=BOB` para v1. |
 | `status` | `text` | No | `draft`, `published` o `cancelled`; default `draft`. |
 | `created_at` | `timestamptz` | No | Default `now()`. |

@@ -5,9 +5,9 @@ import { useState } from 'react';
  * con el título, para que la cartelera nunca tenga huecos.
  */
 export function Poster({ src, title, className = '' }: { src: string | null; title: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
-  if (!src || failed) {
+  if (!src || src === failedSrc) {
     return (
       <div className={`poster poster--fallback ${className}`} aria-hidden="true">
         <span>{title}</span>
@@ -21,7 +21,7 @@ export function Poster({ src, title, className = '' }: { src: string | null; tit
       alt=""
       loading="lazy"
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
     />
   );
 }

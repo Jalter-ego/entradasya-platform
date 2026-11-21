@@ -76,11 +76,33 @@ Ver [`.env.example`](.env.example). Las principales:
 | `JWT_PUBLIC_KEY_FILE` o `JWT_PUBLIC_KEY`, `JWT_ALG`, `JWT_ISSUER`, `JWT_AUDIENCE` | Verificación local del JWT de auth (P1). |
 | `INTERNAL_TOKEN_ORDERS` | Token compartido solo con orders para `/internal/*` (header `X-Internal-Token`). |
 | `CURRENCY` | Moneda acordada (ISO 4217). |
+| `EVENTS_STORAGE_DIR` | Carpeta persistente de portadas. Relativa al directorio de ejecución o absoluta. Por defecto: `~/.local/share/entradasya/event-covers`. |
 | `SEED_ORGANIZER_ID` | Organizador dueño de los eventos de demo; debe coincidir con la semilla de auth. |
+
+## Portadas desde el dispositivo
+
+El formulario permite seleccionar una imagen con vista previa, reemplazarla o quitarla. Los enlaces HTTP(S) anteriores siguen funcionando.
+
+- `POST /api/events/:id/cover`: JWT de organizador dueño; `multipart/form-data` con un solo archivo `image`. Devuelve el evento actualizado. Rechaza eventos cancelados.
+- JPEG, PNG o WebP de hasta **3 MiB**; se comprueban firma y dimensiones (máximo 10 000 por lado y 25 millones de píxeles). SVG no está permitido. La validación de cabeceras no recodifica la imagen.
+- `GET /api/events/covers/:name`: lectura pública, con MIME fijo y `nosniff`. Los archivos tienen nombres UUID nuevos por subida; nunca se usa el nombre proporcionado por el cliente.
+- `events.image_url` conserva solo `/api/events/covers/<uuid>.<ext>`; **no hay migración** ni bytes de imagen en PostgreSQL. El JSON de creación/edición acepta únicamente enlaces HTTP(S) o `null`: las rutas locales las asigna el endpoint de subida.
+- `EVENTS_STORAGE_DIR` se crea al iniciar. El `.env.example` apunta a `../../../.local/entradasya/event-covers` (fuera del repositorio al arrancar desde `services/events`). Debe tener permisos de escritura y mantenerse entre reinicios/despliegues. Respaldar esta carpeta junto con la base; si se usan varias instancias, compartir el almacenamiento o migrar a un servicio de objetos.
+- Una sustitución borra el archivo anterior después de confirmar la transacción. Si la base falla, se elimina el archivo nuevo. Una interrupción abrupta del proceso puede dejar un archivo sin referencia.
+- Al crear, la web guarda primero el borrador y luego sube la portada. Si falla la subida, abre ese mismo borrador y permite seleccionar de nuevo la imagen, sin duplicar eventos.
+- Vite ya reenvía `/api/events`. Si se usa Nginx, aplicar la configuración actualizada y recargarla: ese bloque admite 4 MiB para el archivo y los campos multipart.
+
+Prueba manual: entrar como organizador → Crear evento → seleccionar portada → Guardar borrador → comprobar imagen al editar y publicar → comprobar cartelera → reemplazar o quitar y guardar. Probar además un archivo mayor de 3 MB y un formato no admitido.
 
 ## Pruebas
 
-Necesitan un Postgres real (las pruebas de concurrencia no se pueden simular). Usan su propio schema, `events_test`, que se borra y se recrea en cada ejecución:
+Las pruebas de portadas no requieren PostgreSQL ni puertos abiertos: usan Express y sus parsers reales, archivos temporales y transacciones simuladas (no prueban los bloqueos de PostgreSQL):
+
+```bash
+npm test -- tests/covers.test.ts
+```
+
+Las demás pruebas necesitan un Postgres real (las pruebas de concurrencia no se pueden simular). Usan su propio schema, `events_test`, que se borra y se recrea en cada ejecución:
 
 ```bash
 TEST_DATABASE_URL=postgres://usuario:clave@localhost:5432/events_db npm test

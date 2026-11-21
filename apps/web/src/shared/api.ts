@@ -21,17 +21,18 @@ interface RequestOptions {
 /** Llama a una API pública a través del gateway (/api/...). */
 export async function api<T>(path: string, { method = 'GET', body, token, signal, headers }: RequestOptions = {}): Promise<T> {
   let res: Response;
+  const multipart = body instanceof FormData;
   try {
     res = await fetch(path, {
       method,
       signal,
       headers: {
         Accept: 'application/json',
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(body !== undefined && !multipart ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: multipart ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err;

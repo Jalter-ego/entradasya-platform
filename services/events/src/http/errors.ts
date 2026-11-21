@@ -64,6 +64,14 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     message = err.issues
       .map((i) => (i.path.length ? `${i.path.join('.')}: ${i.message}` : i.message))
       .join('; ');
+  } else if (err?.type === 'entity.too.large') {
+    status = 413;
+    code = 'PAYLOAD_TOO_LARGE';
+    message = 'La solicitud supera el límite permitido. La portada admite hasta 3 MB.';
+  } else if (err?.type === 'encoding.unsupported') {
+    status = 415;
+    code = 'UNSUPPORTED_ENCODING';
+    message = 'No se admiten cargas comprimidas.';
   } else if (err?.type === 'entity.parse.failed') {
     status = 400;
     code = 'INVALID_JSON';

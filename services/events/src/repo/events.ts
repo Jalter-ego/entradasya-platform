@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { PG, pgCode, withTransaction, type Db, type Tx } from '../db.js';
+import { PG, pgCode, withTransaction, type Db } from '../db.js';
 import { AppError, notFound, type AuthUser } from '../http/errors.js';
 
 type Queryable = Pick<pg.Pool, 'query'>;
@@ -144,7 +144,7 @@ async function getById(db: Queryable, id: string) {
  * Carga el evento comprobando que pertenece al organizador.
  * forUpdate bloquea la fila hasta el fin de la transacción.
  */
-async function loadOwned(tx: Tx, id: string, user: AuthUser, forUpdate = false) {
+async function loadOwned(tx: Queryable, id: string, user: AuthUser, forUpdate = false) {
   if (!isUuid(id)) throw notFound('Evento');
   const { rows } = await tx.query<EventRow>(
     `SELECT * FROM events WHERE id = $1 ${forUpdate ? 'FOR UPDATE' : ''}`,
@@ -218,7 +218,17 @@ const EVENT_COLUMNS: Record<keyof EventInput, string> = {
   imageUrl: 'image_url',
 };
 
+export async function assertEditable(db: Db, user: AuthUser, id: string) {
+  // Comprobación previa a recibir el archivo. updateEventWithPreviousImage revalida con bloqueo.
+  const event = await loadOwned(db, id, user);
+  assertNotCancelled(event);
+}
+
 export async function updateEvent(db: Db, user: AuthUser, id: string, patch: Partial<EventInput>) {
+  return (await updateEventWithPreviousImage(db, user, id, patch)).event;
+}
+
+export async function updateEventWithPreviousImage(db: Db, user: AuthUser, id: string, patch: Partial<EventInput>) {
   return withTransaction(db, async (tx) => {
     const event = await loadOwned(tx, id, user, true);
     assertNotCancelled(event);
@@ -228,7 +238,7 @@ export async function updateEvent(db: Db, user: AuthUser, id: string, patch: Par
       `UPDATE events SET ${[...sets, 'updated_at = now()'].join(', ')} WHERE id = $1`,
       [id, ...entries.map(([, v]) => v)],
     );
-    return getById(tx, id);
+    return { event: await getById(tx, id), previousImageUrl: event.image_url };
   });
 }
 
